@@ -6,6 +6,10 @@ declare module 'claude-code' {
     'kompreni-offer': {
       /** Paths edited since the last Kompreni explanation in this session. */
       sinceExplain: KompreniOfferFiles
+      /** Paths edited at any point in this session. */
+      allEdited: KompreniOfferFiles
+      /** What Explain covers: since the last explanation, or the whole conversation. */
+      scope: 'new' | 'all'
       /** Whether the offer row is showing. */
       isVisible: boolean
       /** Whether an explanation has run in this session (changes the row's wording). */

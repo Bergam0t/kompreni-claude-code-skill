@@ -5,6 +5,9 @@ import type { EngineInterface, Register } from 'claude-code'
 const sinceExplain = atom({ plugin: 'kompreni-offer', key: 'sinceExplain' } as const, [])
 const isVisible = atom({ plugin: 'kompreni-offer', key: 'isVisible' } as const, false)
 const hasExplained = atom({ plugin: 'kompreni-offer', key: 'hasExplained' } as const, false)
+const allEdited = atom({ plugin: 'kompreni-offer', key: 'allEdited' } as const, [])
+// Session only: "whole conversation" is a one-off choice, unlike depth and level.
+const scope = atom({ plugin: 'kompreni-offer', key: 'scope' } as const, 'new')
 
 // Settings kept across sessions in $.store.
 const LEVEL = 'level'
@@ -14,6 +17,20 @@ const ENABLED = 'enabled'
 
 const DEPTHS = ['auto', 'brief', 'standard', 'deep']
 const LEVELS = ['auto', 'new-to-programming', 'new-to-language', 'intermediate', 'advanced']
+// What 'auto' means, shown in the pickers. The value filled in stays 'auto' (i.e. no argument).
+const AUTO_LABELS: Record<string, string> = {
+  depth: 'auto (picked from the size of the change)',
+  level: 'auto (intermediate, unless this chat, CLAUDE.md or memory says otherwise)',
+}
+
+/** Picker options: each value as its own label, except 'auto', which says what it means. */
+export const optionsFor = (kind: 'depth' | 'level', values: string[]) =>
+  values.map(value => (value === 'auto' ? { value, label: AUTO_LABELS[kind] } : { value }))
+
+const SCOPES = [
+  { value: 'new', label: 'since last explanation' },
+  { value: 'all', label: 'whole conversation' },
+]
 // The explain skill's names: as a plugin, then as a plain skill (e.g. a junction).
 const KNOWN_COMMANDS = ['kompreni:explain', 'kompreni-explain']
 
@@ -34,9 +51,10 @@ export const parseArgs = (args: string) => {
   return out
 }
 
-/** The prompt to fill: the command plus any non-auto settings. */
-export const buildPrompt = (command: string, depth: string, level: string) => {
+/** The prompt to fill: the command plus any non-default settings. */
+export const buildPrompt = (command: string, depth: string, level: string, scope = 'new') => {
   const parts = [`/${command}`]
+  if (scope === 'all') parts.push('scope=all')
   if (depth !== 'auto') parts.push(`depth=${depth}`)
   if (level !== 'auto') parts.push(/\s/.test(level) ? `level="${level}"` : `level=${level}`)
   return parts.join(' ')
@@ -95,7 +113,9 @@ export const register: Register = on => {
       const path = input.file_path ?? input.notebook_path
       if (path !== undefined) {
         turnEdits += 1
-        await update($, sinceExplain, files => (files.includes(path) ? files : [...files, path]))
+        const add = (files: string[]) => (files.includes(path) ? files : [...files, path])
+        await update($, sinceExplain, add)
+        await update($, allEdited, add)
       }
     } else if (e.tool === 'Skill' && input.skill !== undefined) {
       if (await isSessionExplain($, input.skill, input.args ?? '')) await markExplained($)
@@ -138,13 +158,17 @@ export const register: Register = on => {
   })
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
-    const files = await read($, sinceExplain)
-    if (e.props.hasSurvey || !(await read($, isVisible)) || files.length === 0) return next(e)
+    const pending = await read($, sinceExplain)
+    if (e.props.hasSurvey || !(await read($, isVisible)) || pending.length === 0) return next(e)
 
     const depth = text(await $.store.get(DEPTH), 'auto')
     const level = text(await $.store.get(LEVEL), 'auto')
     const levels = LEVELS.includes(level) ? LEVELS : [...LEVELS, level]
-    const since = (await read($, hasExplained)) ? 'since the last explanation' : 'in this conversation'
+    const explained = await read($, hasExplained)
+    const chosenScope = explained ? await read($, scope) : 'new'
+    const isAll = chosenScope === 'all'
+    const files = isAll ? await read($, allEdited) : pending
+    const since = explained && !isAll ? 'since the last explanation' : 'in this conversation'
     const { Box, Button, Select, Text } = $.ui.resolve(e)
     const n = files.length
 
@@ -162,7 +186,8 @@ export const register: Register = on => {
       // Read the settings now, not the values captured when the band was drawn.
       const chosenDepth = text(await $.store.get(DEPTH), 'auto')
       const chosenLevel = text(await $.store.get(LEVEL), 'auto')
-      const filled = await $.prompt.fill({ text: buildPrompt(command, chosenDepth, chosenLevel) })
+      const nowScope = (await read($, hasExplained)) ? await read($, scope) : 'new'
+      const filled = await $.prompt.fill({ text: buildPrompt(command, chosenDepth, chosenLevel, nowScope) })
       // The count resets when the explanation actually runs, not here.
       if (filled.isFilled) await update($, isVisible, () => false)
     }
@@ -172,18 +197,27 @@ export const register: Register = on => {
         <Text dimColor>
           Kompreni: {n} file{n === 1 ? '' : 's'} changed {since}.
         </Text>
+        {explained && (
+          <Select
+            key="scope"
+            label="Scope"
+            value={chosenScope}
+            options={SCOPES}
+            onSelect={value => void update($, scope, () => (value === 'all' ? 'all' : 'new'))}
+          />
+        )}
         <Select
           key="depth"
           label="Depth"
           value={depth}
-          options={DEPTHS.map(value => ({ value }))}
+          options={optionsFor('depth', DEPTHS)}
           onSelect={value => void $.store.set(DEPTH, value)}
         />
         <Select
           key="level"
           label="Level"
           value={level}
-          options={levels.map(value => ({ value }))}
+          options={optionsFor('level', levels)}
           onSelect={value => void $.store.set(LEVEL, value)}
         />
         <Button key="explain" label="Explain" onPress={() => void explain()} />

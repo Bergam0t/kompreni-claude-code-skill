@@ -44,7 +44,7 @@ You can also just ask, for example "walk me through what you changed". The skill
 - `advanced`: no background at all;
 - or describe yourself in free text, and new constructs are explained by comparison with what you know.
 
-If you don't give a level, Kompreni uses what you've told Claude about your experience (in the chat, `CLAUDE.md` or memory). The level used is named in the first line, so you can correct it.
+If you don't give a level, Kompreni uses `intermediate`, unless something in this conversation, your `CLAUDE.md` or Claude's memory describes your experience (for example "I'm new to Python"). The level used is named in the first line, so you can correct it.
 
 ### Explaining history: a branch, a commit, or a range
 

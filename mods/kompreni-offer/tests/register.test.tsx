@@ -2,7 +2,7 @@ import { expect, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
-import { buildPrompt, parseArgs } from '../hooks/register'
+import { buildPrompt, optionsFor, parseArgs } from '../hooks/register'
 
 const turn = (agentId?: string) => ({
   reason: 'answer' as const,
@@ -50,6 +50,8 @@ test('builds the prompt from settings', async () => {
   expect(buildPrompt('kompreni:explain', 'auto', 'fluent in R, new to Python')).toBe(
     '/kompreni:explain level="fluent in R, new to Python"',
   )
+  expect(buildPrompt('kompreni:explain', 'brief', 'auto', 'all')).toBe('/kompreni:explain scope=all depth=brief')
+  expect(buildPrompt('kompreni:explain', 'auto', 'auto', 'new')).toBe('/kompreni:explain')
 })
 
 test('parses settings arguments', async () => {
@@ -231,4 +233,48 @@ test('filling the command without running it keeps the count', async ($, on) => 
   expect(await rowText()).toBeUndefined()
   await editTurn('/repo/b.py')
   expect(await rowText()).toBe('Kompreni: 2 files changed in this conversation.')
+})
+
+test('the scope toggle is hidden until an explanation has run', async ($, on) => {
+  const { editTurn } = setUp($, on)
+  await editTurn('/repo/a.py')
+  const ui = await $.ui.mount({ ...BAND, surface: 'vscode' })
+  expect(await ui.find({ key: 'scope' })).toBeUndefined()
+  await ui.unmount()
+})
+
+test('choosing the whole conversation changes the count and the command', async ($, on) => {
+  const { editTurn, rowText } = setUp($, on)
+  const filled: string[] = []
+  on('command.list', () => ({ value: [command('kompreni:explain')] }))
+  on('prompt.read', () => ({ value: { text: '', cursor: 0 } }))
+  on('prompt.fill', (_, e) => {
+    filled.push(e.text)
+    return { isFilled: true, text: e.text, cursor: e.text.length }
+  })
+
+  await editTurn('/repo/a.py')
+  await editTurn('/repo/b.py')
+  await $.prompt.submit({ ...typed('/kompreni:explain'), command: { name: 'kompreni:explain', args: '' } })
+  await $.turn.complete(turn())
+  await editTurn('/repo/c.py')
+  expect(await rowText()).toBe('Kompreni: 1 file changed since the last explanation.')
+
+  const ui = await $.ui.mount({ ...BAND, surface: 'vscode' })
+  await ui.select({ key: 'scope', value: 'all' })
+  await ui.unmount()
+  expect(await rowText()).toBe('Kompreni: 3 files changed in this conversation.')
+
+  const again = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  await again.press({ key: 'explain' })
+  await again.unmount()
+  expect(filled).toEqual(['/kompreni:explain scope=all'])
+})
+
+test("'auto' options say what they mean; other options show their value", async () => {
+  expect(optionsFor('depth', ['auto', 'brief'])).toEqual([
+    { value: 'auto', label: 'auto (picked from the size of the change)' },
+    { value: 'brief' },
+  ])
+  expect(optionsFor('level', ['auto'])[0]?.label).toBe('auto (intermediate, unless this chat, CLAUDE.md or memory says otherwise)')
 })

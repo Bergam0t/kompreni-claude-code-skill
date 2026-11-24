@@ -8,9 +8,11 @@ Kompreni: 3 files changed since the last explanation.  Depth [auto ▾]  Level [
 
 The count matches what the skill will explain: files edited since the last Kompreni explanation in this session, across however many turns. It resets when an explanation actually runs, whether you used the button, typed the command, or asked Claude in words. History-mode runs (`branch=`, `since=`, `commit=`) don't reset it. **Dismiss** hides the row until the next turn that edits something; the count carries on.
 
+After the first explanation, a **Scope** picker appears: *since last explanation* (the default) or *whole conversation*, which fills in `scope=all` and counts every file changed in the session. The choice lasts for the session only.
+
 **Explain** fills your prompt box with the command, e.g. `/kompreni:explain depth=deep level=new-to-language`. You press Enter. It never submits for you, and it never overwrites a draft you've started.
 
-The depth and level you pick are remembered across sessions.
+The depth and level you pick are remembered across sessions. Each picker's **auto** option says what it does: depth is picked from the size of the change, and level is intermediate unless this conversation, your `CLAUDE.md` or Claude's memory says something about your experience (e.g. "I'm new to Python"). The explanation's first line says which level it used and where that came from.
 
 ## Requirements
 

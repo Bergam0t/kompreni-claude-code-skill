@@ -25,3 +25,5 @@
     - New `scope=` argument: `new` (default) covers changes since the previous Kompreni explanation, `all` gives one consolidated explanation of the whole conversation
     - Each session-mode explanation ends with a `Kompreni snapshot:` line; `skills/explain/scripts/snapshot.py` records the working tree as a git tree without touching files, index, branches or stash, so later explanations catch every change, including ones made by shell commands
     - The `kompreni-offer` mod now counts files changed since the last explanation across turns, and resets when an explanation runs by any route
+    - The mod gains a Scope picker (since last explanation, or whole conversation) once an explanation has run
+    - The mod's `auto` options say what they correspond to
