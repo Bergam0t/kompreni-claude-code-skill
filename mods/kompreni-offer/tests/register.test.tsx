@@ -63,8 +63,8 @@ test('parses settings arguments', async () => {
   })
 })
 
-test('no band before any edit, a band after a turn that edited a file', async ($, on) => {
-  memoryStore(on)
+test('show=changes: no band before any edit, a band after a turn that edited a file', async ($, on) => {
+  memoryStore(on).set('show', 'changes')
   on('tool.call', () => ({ result: {} }))
   on('turn.complete', (_, e) => ({ text: e.answer }))
   on('prompt.submit', (_, e) => ({ text: e.text }))
@@ -85,8 +85,8 @@ test('no band before any edit, a band after a turn that edited a file', async ($
   }
 })
 
-test('a turn with no edits, or a subagent turn, offers nothing', async ($, on) => {
-  memoryStore(on)
+test('show=changes: a turn with no edits, or a subagent turn, offers nothing', async ($, on) => {
+  memoryStore(on).set('show', 'changes')
   on('tool.call', () => ({ result: {} }))
   on('turn.complete', (_, e) => ({ text: e.answer }))
   on('prompt.submit', (_, e) => ({ text: e.text }))
@@ -156,7 +156,7 @@ test('a draft in the prompt box is never overwritten', async ($, on) => {
 
 // Shared setup for the accumulation tests: the engine stubs, and helpers for a turn.
 const setUp = ($: Engine, on: On) => {
-  memoryStore(on)
+  const store = memoryStore(on)
   on('tool.call', () => ({ result: {} }))
   on('turn.complete', (_, e) => ({ text: e.answer }))
   on('prompt.submit', (_, e) => ({ text: e.text }))
@@ -165,13 +165,13 @@ const setUp = ($: Engine, on: On) => {
     await $.tool.call({ tool: 'Edit', file_path: path, old_string: 'a', new_string: 'b' })
     await $.turn.complete(turn())
   }
-  const rowText = async () => {
-    const ui = await $.ui.mount({ ...BAND, surface: 'vscode' })
+  const rowText = async (isWorking = false) => {
+    const ui = await $.ui.mount({ ...BAND, props: { ...BAND.props, isWorking }, surface: 'vscode' })
     const found = (await ui.find({ type: 'Text', text: /Kompreni/ }))?.text
     await ui.unmount()
     return found
   }
-  return { editTurn, rowText }
+  return { editTurn, rowText, store }
 }
 
 test('edits accumulate across turns until an explanation runs', async ($, on) => {
@@ -182,8 +182,9 @@ test('edits accumulate across turns until an explanation runs', async ($, on) =>
   expect(await rowText()).toBe('Kompreni: 2 files changed in this conversation.')
 })
 
-test('a turn with no edits hides the row but keeps the count', async ($, on) => {
-  const { editTurn, rowText } = setUp($, on)
+test('show=changes: a turn with no edits hides the row but keeps the count', async ($, on) => {
+  const { editTurn, rowText, store } = setUp($, on)
+  store.set('show', 'changes')
   await editTurn('/repo/a.py')
   await $.prompt.submit(typed('just a question'))
   await $.turn.complete(turn())
@@ -277,4 +278,78 @@ test("'auto' options say what they mean; other options show their value", async 
     { value: 'brief' },
   ])
   expect(optionsFor('level', ['auto'])[0]?.label).toBe('auto (intermediate, unless this chat, CLAUDE.md or memory says otherwise)')
+})
+
+test('show=always (the default): the row shows before any edit, but not while Claude works', async ($, on) => {
+  const { editTurn, rowText } = setUp($, on)
+  expect(await rowText()).toBe('Kompreni: no file edits seen in this conversation.')
+  expect(await rowText(true)).toBeUndefined()
+  const compact = await $.ui.mount({ ...BAND, surface: 'vscode' })
+  expect(await compact.find({ key: 'explain' })).toBeDefined()
+  expect(await compact.find({ key: 'depth' })).toBeUndefined()
+  await compact.unmount()
+  await editTurn('/repo/a.py')
+  await $.prompt.submit(typed('just a question'))
+  await $.turn.complete(turn())
+  expect(await rowText()).toBe('Kompreni: 1 file changed in this conversation.')
+  const full = await $.ui.mount({ ...BAND, surface: 'vscode' })
+  expect(await full.find({ key: 'depth' })).toBeDefined()
+  await full.unmount()
+})
+
+test('show=always: with nothing new since an explanation, Explain fills the remembered settings', async ($, on) => {
+  const { editTurn, rowText, store } = setUp($, on)
+  const filled: string[] = []
+  on('command.list', () => ({ value: [command('kompreni:explain')] }))
+  on('prompt.read', () => ({ value: { text: '', cursor: 0 } }))
+  on('prompt.fill', (_, e) => {
+    filled.push(e.text)
+    return { isFilled: true, text: e.text, cursor: e.text.length }
+  })
+  store.set('depth', 'brief')
+  await editTurn('/repo/a.py')
+  await $.prompt.submit({ ...typed('/kompreni:explain'), command: { name: 'kompreni:explain', args: '' } })
+  await $.turn.complete(turn())
+  expect(await rowText()).toBe('Kompreni: no file edits seen since the last explanation.')
+  const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  expect(await ui.find({ key: 'scope' })).toBeUndefined()
+  await ui.press({ key: 'explain' })
+  await ui.unmount()
+  expect(filled).toEqual(['/kompreni:explain depth=brief'])
+})
+
+test('show=always: "Whole conversation" on the one-line row opens the full row with that scope', async ($, on) => {
+  const { editTurn, rowText } = setUp($, on)
+  const before = await $.ui.mount({ ...BAND, surface: 'vscode' })
+  expect(await before.find({ key: 'scope-all' })).toBeUndefined()
+  await before.unmount()
+  await editTurn('/repo/a.py')
+  await $.prompt.submit({ ...typed('/kompreni:explain'), command: { name: 'kompreni:explain', args: '' } })
+  await $.turn.complete(turn())
+  const ui = await $.ui.mount({ ...BAND, surface: 'vscode' })
+  await ui.press({ key: 'scope-all' })
+  await ui.unmount()
+  expect(await rowText()).toBe('Kompreni: 1 file changed in this conversation.')
+  const full = await $.ui.mount({ ...BAND, surface: 'vscode' })
+  expect(await full.find({ key: 'scope' })).toBeDefined()
+  await full.unmount()
+})
+
+test('show=always: Dismiss hides the row until the next turn finishes, edits or not', async ($, on) => {
+  const { rowText } = setUp($, on)
+  const ui = await $.ui.mount({ ...BAND, surface: 'vscode' })
+  await ui.press({ key: 'dismiss' })
+  await ui.unmount()
+  expect(await rowText()).toBeUndefined()
+  await $.prompt.submit(typed('just a question'))
+  await $.turn.complete(turn('sub-1'))
+  expect(await rowText()).toBeUndefined()
+  await $.turn.complete(turn())
+  expect(await rowText()).toBe('Kompreni: no file edits seen in this conversation.')
+})
+
+test('off hides the row whichever show setting is chosen', async ($, on) => {
+  const { rowText, store } = setUp($, on)
+  store.set('enabled', 'off')
+  expect(await rowText()).toBeUndefined()
 })

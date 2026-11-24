@@ -27,3 +27,6 @@
     - The `kompreni-offer` mod now counts files changed since the last explanation across turns, and resets when an explanation runs by any route
     - The mod gains a Scope picker (since last explanation, or whole conversation) once an explanation has run
     - The mod's `auto` options say what they correspond to
+    - The mod's row puts each picker on its own line, with its label on the left and the picker filling the width (mod version 0.1.1)
+    - The mod's row now shows whenever Claude isn't working, even before any edits; `/kompreni-offer show=changes` restores showing it only after turns that edit files (mod version 0.1.2)
+    - When there's nothing new to explain, the row shrinks to one line with Explain, Dismiss and, after an explanation, Whole conversation

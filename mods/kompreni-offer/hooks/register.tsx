@@ -1,5 +1,5 @@
 import { atom, read, update } from 'claude-code'
-import type { EngineInterface, Register } from 'claude-code'
+import type { EngineInterface, Register, RenderChildren } from 'claude-code'
 
 // Session state: files edited since the last explanation, and whether to show the row.
 const sinceExplain = atom({ plugin: 'kompreni-offer', key: 'sinceExplain' } as const, [])
@@ -8,12 +8,18 @@ const hasExplained = atom({ plugin: 'kompreni-offer', key: 'hasExplained' } as c
 const allEdited = atom({ plugin: 'kompreni-offer', key: 'allEdited' } as const, [])
 // Session only: "whole conversation" is a one-off choice, unlike depth and level.
 const scope = atom({ plugin: 'kompreni-offer', key: 'scope' } as const, 'new')
+// With show=always: hidden by Dismiss (or by filling the prompt) until the next turn finishes.
+const isDismissed = atom({ plugin: 'kompreni-offer', key: 'isDismissed' } as const, false)
 
 // Settings kept across sessions in $.store.
 const LEVEL = 'level'
 const DEPTH = 'depth'
 const COMMAND = 'command'
 const ENABLED = 'enabled'
+const SHOW = 'show'
+
+// When the row shows: always (the default), or only after a turn that edited files.
+const SHOWS = ['always', 'changes']
 
 const DEPTHS = ['auto', 'brief', 'standard', 'deep']
 const LEVELS = ['auto', 'new-to-programming', 'new-to-language', 'intermediate', 'advanced']
@@ -90,8 +96,9 @@ export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     await $.command.register({
       name: 'kompreni-offer',
-      description: 'Kompreni offer settings: on, off, depth=, level=, command=',
-      argumentHint: '[on|off] [depth=auto|brief|standard|deep] [level=<preset or "free text">] [command=<skill command>]',
+      description: 'Kompreni offer settings: on, off, show=, depth=, level=, command=',
+      argumentHint:
+        '[on|off] [show=always|changes] [depth=auto|brief|standard|deep] [level=<preset or "free text">] [command=<skill command>]',
     })
     return next(e)
   })
@@ -127,8 +134,9 @@ export const register: Register = on => {
     const done = await next(e)
     const isMainAnswer = e.agentId === undefined && e.reason === 'answer'
     const isEnabled = text(await $.store.get(ENABLED), 'on') === 'on'
-    if (isMainAnswer && isEnabled && turnEdits > 0) {
-      await update($, isVisible, () => true)
+    if (isMainAnswer && isEnabled) {
+      await update($, isDismissed, () => false)
+      if (turnEdits > 0) await update($, isVisible, () => true)
     }
     return done
   }).catch(($, e, next) => next(e))
@@ -137,6 +145,10 @@ export const register: Register = on => {
     const args = parseArgs(e.args)
     const errors: string[] = []
     if (args.enabled !== undefined) await $.store.set(ENABLED, args.enabled)
+    if (args.show !== undefined) {
+      if (SHOWS.includes(args.show)) await $.store.set(SHOW, args.show)
+      else errors.push(`show must be one of ${SHOWS.join(', ')}`)
+    }
     if (args.depth !== undefined) {
       if (DEPTHS.includes(args.depth)) await $.store.set(DEPTH, args.depth)
       else errors.push(`depth must be one of ${DEPTHS.join(', ')}`)
@@ -148,6 +160,7 @@ export const register: Register = on => {
     const pending = (await read($, sinceExplain)).length
     const lines = [
       `Kompreni offer: ${text(await $.store.get(ENABLED), 'on')}`,
+      `show: ${text(await $.store.get(SHOW), 'always')}`,
       `depth: ${text(await $.store.get(DEPTH), 'auto')}`,
       `level: ${text(await $.store.get(LEVEL), 'auto')}`,
       `command: /${command}`,
@@ -158,8 +171,13 @@ export const register: Register = on => {
   })
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
+    if (e.props.hasSurvey || text(await $.store.get(ENABLED), 'on') !== 'on') return next(e)
     const pending = await read($, sinceExplain)
-    if (e.props.hasSurvey || !(await read($, isVisible)) || pending.length === 0) return next(e)
+    const isAlways = text(await $.store.get(SHOW), 'always') === 'always'
+    const shows = isAlways
+      ? !e.props.isWorking && !(await read($, isDismissed))
+      : (await read($, isVisible)) && pending.length > 0
+    if (!shows) return next(e)
 
     const depth = text(await $.store.get(DEPTH), 'auto')
     const level = text(await $.store.get(LEVEL), 'auto')
@@ -171,6 +189,12 @@ export const register: Register = on => {
     const since = explained && !isAll ? 'since the last explanation' : 'in this conversation'
     const { Box, Button, Select, Text } = $.ui.resolve(e)
     const n = files.length
+    // Edits made only through shell commands aren't seen here, but the skill still finds them in git.
+    const summary = n === 0 ? `no file edits seen ${since}` : `${n} file${n === 1 ? '' : 's'} changed ${since}`
+    const hide = async () => {
+      await update($, isVisible, () => false)
+      await update($, isDismissed, () => true)
+    }
 
     const explain = async () => {
       const command = await resolveCommand($)
@@ -189,39 +213,73 @@ export const register: Register = on => {
       const nowScope = (await read($, hasExplained)) ? await read($, scope) : 'new'
       const filled = await $.prompt.fill({ text: buildPrompt(command, chosenDepth, chosenLevel, nowScope) })
       // The count resets when the explanation actually runs, not here.
-      if (filled.isFilled) await update($, isVisible, () => false)
+      if (filled.isFilled) await hide()
     }
 
-    return (
+    const buttons = (
       <Box flexDirection="row" gap={1}>
-        <Text dimColor>
-          Kompreni: {n} file{n === 1 ? '' : 's'} changed {since}.
-        </Text>
-        {explained && (
-          <Select
-            key="scope"
-            label="Scope"
-            value={chosenScope}
-            options={SCOPES}
-            onSelect={value => void update($, scope, () => (value === 'all' ? 'all' : 'new'))}
-          />
-        )}
-        <Select
-          key="depth"
-          label="Depth"
-          value={depth}
-          options={optionsFor('depth', DEPTHS)}
-          onSelect={value => void $.store.set(DEPTH, value)}
-        />
-        <Select
-          key="level"
-          label="Level"
-          value={level}
-          options={optionsFor('level', levels)}
-          onSelect={value => void $.store.set(LEVEL, value)}
-        />
         <Button key="explain" label="Explain" onPress={() => void explain()} />
-        <Button key="dismiss" label="Dismiss" onPress={() => void update($, isVisible, () => false)} />
+        <Button key="dismiss" label="Dismiss" onPress={() => void hide()} />
+      </Box>
+    )
+
+    // Nothing new to explain: one line, using the remembered depth and level. After an explanation,
+    // "Whole conversation" switches to the full row with that scope chosen.
+    if (n === 0) {
+      const canWiden = explained && (await read($, allEdited)).length > 0
+      return (
+        <Box flexDirection="row" alignItems="center" gap={1}>
+          <Text dimColor>Kompreni: {summary}.</Text>
+          {buttons}
+          {canWiden && (
+            <Button key="scope-all" label="Whole conversation" onPress={() => void update($, scope, () => 'all')} />
+          )}
+        </Box>
+      )
+    }
+
+    // One picker per line: a fixed-width label on the left, the picker stretching to fill the rest.
+    const row = (label: string, picker: RenderChildren) => (
+      <Box flexDirection="row" alignItems="center" gap={1}>
+        <Box width={6} flexShrink={0}>
+          <Text>{label}</Text>
+        </Box>
+        <Box flexGrow={1}>{picker}</Box>
+      </Box>
+    )
+
+    return (
+      <Box flexDirection="column" rowGap={0}>
+        <Text dimColor>Kompreni: {summary}.</Text>
+        {explained &&
+          row(
+            'Scope',
+            <Select
+              key="scope"
+              value={chosenScope}
+              options={SCOPES}
+              onSelect={value => void update($, scope, () => (value === 'all' ? 'all' : 'new'))}
+            />,
+          )}
+        {row(
+          'Depth',
+          <Select
+            key="depth"
+            value={depth}
+            options={optionsFor('depth', DEPTHS)}
+            onSelect={value => void $.store.set(DEPTH, value)}
+          />,
+        )}
+        {row(
+          'Level',
+          <Select
+            key="level"
+            value={level}
+            options={optionsFor('level', levels)}
+            onSelect={value => void $.store.set(LEVEL, value)}
+          />,
+        )}
+        {buttons}
       </Box>
     )
   })

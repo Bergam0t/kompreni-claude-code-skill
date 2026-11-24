@@ -1,12 +1,31 @@
 # kompreni-offer (optional mod)
 
-An optional companion to the `kompreni` skill. After a turn in which Claude edited files, it shows one row above the prompt:
+An optional companion to the `kompreni` skill. It shows a row above the prompt, whenever Claude isn't working:
 
 ```
-Kompreni: 3 files changed since the last explanation.  Depth [auto ▾]  Level [new-to-language ▾]  [Explain]  [Dismiss]
+Kompreni: 3 files changed since the last explanation.
+Scope  [since last explanation                        ▾]
+Depth  [auto (picked from the size of the change)     ▾]
+Level  [new-to-language                               ▾]
+[Explain] [Dismiss]
 ```
 
-The count matches what the skill will explain: files edited since the last Kompreni explanation in this session, across however many turns. It resets when an explanation actually runs, whether you used the button, typed the command, or asked Claude in words. History-mode runs (`branch=`, `since=`, `commit=`) don't reset it. **Dismiss** hides the row until the next turn that edits something; the count carries on.
+(The Scope line appears only after the first explanation.)
+
+When there's nothing new to explain, it shrinks to one line, and Explain uses your remembered depth and level:
+
+```
+Kompreni: no file edits seen since the last explanation.  [Explain] [Dismiss] [Whole conversation]
+```
+
+(**Whole conversation** appears only after an explanation, and opens the full row with that scope chosen.)
+
+**When it shows** (`/kompreni-offer show=...`):
+
+- `always`, the default: whenever Claude isn't working, even before any edits, when it is the one-line form. This is still useful because edits made through shell commands aren't counted, but the skill finds them in git. **Dismiss** hides the row until the next turn finishes.
+- `changes`: only after a turn in which Claude edited files. **Dismiss** hides the row until the next turn that edits something.
+
+The count matches what the skill will explain: files edited since the last Kompreni explanation in this session, across however many turns. It resets when an explanation actually runs, whether you used the button, typed the command, or asked Claude in words. History-mode runs (`branch=`, `since=`, `commit=`) don't reset it. Dismissing the row doesn't reset the count either.
 
 After the first explanation, a **Scope** picker appears: *since last explanation* (the default) or *whole conversation*, which fills in `scope=all` and counts every file changed in the session. The choice lasts for the session only.
 
@@ -21,6 +40,8 @@ The depth and level you pick are remembered across sessions. Each picker's **aut
 
 ## Load it
 
+Installed copies update only when the version in `.claude-plugin/plugin.json` changes, so bump it with every change you want installed users to receive. To pick up a new version: `/plugin marketplace update kompreni`, then `/plugin update kompreni-offer@kompreni`.
+
 - **CLI, for trying it:** `claude --plugin-dir <this folder>` (add another `--plugin-dir` for the skill if it isn't installed).
 - **Installed:** `/plugin install kompreni-offer@kompreni` from this repository's marketplace.
 
@@ -28,7 +49,8 @@ The depth and level you pick are remembered across sessions. Each picker's **aut
 
 ```
 /kompreni-offer                                   # show current settings
-/kompreni-offer off                               # stop offering (on to resume)
+/kompreni-offer off                               # hide the row entirely (on to resume)
+/kompreni-offer show=changes                      # only after turns that edit files (show=always to go back)
 /kompreni-offer depth=brief
 /kompreni-offer level="fluent in R, new to Python"
 /kompreni-offer command=kompreni-explain          # force which skill command to use
@@ -38,8 +60,8 @@ A free-text level set here appears as an extra option in the Level picker.
 
 ## Limitations
 
-- It notices edits made with Claude's Edit, Write and NotebookEdit tools, including by subagents. A turn that changed files **only** through shell commands won't trigger an offer. You can still run the skill yourself, and it reads the real changes from git either way.
-- Offers appear only after the main conversation's turns finish with an answer, not after interrupted turns.
+- It notices edits made with Claude's Edit, Write and NotebookEdit tools, including by subagents. They aren't counted when files change **only** through shell commands, so with `show=changes` no offer appears. With `show=always`, or by running the skill yourself, the explanation still covers them, because the skill reads the real changes from git.
+- With `show=changes`, offers appear only after the main conversation's turns finish with an answer, not after interrupted turns.
 - Mods are a new, evolving part of Claude Code and are not sandboxed. Read `hooks/register.tsx` before loading it.
 
 ## Development

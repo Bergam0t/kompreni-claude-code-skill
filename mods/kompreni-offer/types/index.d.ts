@@ -12,6 +12,8 @@ declare module 'claude-code' {
       scope: 'new' | 'all'
       /** Whether the offer row is showing. */
       isVisible: boolean
+      /** With show=always: whether Dismiss (or filling the prompt) has hidden the row until the next turn ends. */
+      isDismissed: boolean
       /** Whether an explanation has run in this session (changes the row's wording). */
       hasExplained: boolean
     }
