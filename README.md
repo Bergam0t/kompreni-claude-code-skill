@@ -28,6 +28,22 @@ After the agent has made changes:
 
 You can also just ask, for example "walk me through what you changed". The skill never runs on its own after every task.
 
+### Matching your experience
+
+```
+/kompreni:explain level=new-to-language
+/kompreni:explain level="fluent in R, new to Python"
+```
+
+`level` sets how much language and library background is explained alongside the change:
+- `new-to-programming` (or `beginner`): general programming concepts as well as the language;
+- `new-to-language`: syntax, idioms, gotchas and libraries, for experienced programmers;
+- `intermediate` (the default): only less-common features;
+- `advanced`: no background at all;
+- or describe yourself in free text, and new constructs are explained by comparison with what you know.
+
+If you don't give a level, Kompreni uses what you've told Claude about your experience (in the chat, `CLAUDE.md` or memory). The level used is named in the first line, so you can correct it.
+
 ### Explaining history: a branch, a commit, or a range
 
 ```

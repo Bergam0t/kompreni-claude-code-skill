@@ -13,3 +13,7 @@
     - Adds an optional "How it got here" section and a scope note; never changes the checkout
     - Handles already-merged branches (finds the merge commit via the PR) and branch names that are also file names
     - `check_refs.py --ref <git-ref>` checks references against a branch or commit that isn't checked out
+- Match explanations to the reader's prior knowledge with `level=`
+    - Presets: `new-to-programming` (alias `beginner`), `new-to-language`, `intermediate` (default) and `advanced`, or free text such as `"fluent in R, new to Python"`
+    - A "Concepts used here" section explains the constructs, patterns and library APIs the change relies on, each tied to a real line
+    - With no `level=`, uses what the user has said about their experience, and names the level used

@@ -25,6 +25,7 @@ Scenarios 09-13 test history mode. They need a repo with branches and commits se
 10. Beats the completion summary on understanding (history mode: beats reading `git log` and the diff)
 11. History mode: the scope is correct (the right range, no changes merged in from main, uncommitted work excluded) and nothing in the checkout changed
 12. History mode: reasons from commits and PRs are labelled *(commit)* or *(PR #n)*, and agent-written commit summaries aren't presented as reasons
+13. Level: the concepts explained fit the level (no programming basics for `new-to-language`, none at all for `advanced`), are accurate, cite real lines, and stay within the limit
 
 Unit tests for the checker: `python -m unittest discover tests`.
 

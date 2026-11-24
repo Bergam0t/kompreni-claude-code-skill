@@ -4,11 +4,11 @@ These describe an invented small Python project. They show shape and tone, not r
 
 ## Brief
 
-> Depth: brief. `parse_date` in [dates.py:14](src/dates.py#L14) crashed on an empty string because it indexed `s[0]` before checking length. It now returns `None` for empty or whitespace-only input *(code)*, and its one caller, `load_row`, already treats `None` as "skip this row" ([loader.py:31](src/loader.py#L31)), so blank cells are now skipped instead of aborting the import. A regression test was added in `tests/test_dates.py`; I ran the full suite (42 passed). Non-date garbage such as `"abc"` still raises, which wasn't touched.
+> Depth: brief. Level: intermediate. `parse_date` in [dates.py:14](src/dates.py#L14) crashed on an empty string because it indexed `s[0]` before checking length. It now returns `None` for empty or whitespace-only input *(code)*, and its one caller, `load_row`, already treats `None` as "skip this row" ([loader.py:31](src/loader.py#L31)), so blank cells are now skipped instead of aborting the import. A regression test was added in `tests/test_dates.py`; I ran the full suite (42 passed). Non-date garbage such as `"abc"` still raises, which wasn't touched.
 
 ## Standard
 
-> Depth: standard.
+> Depth: standard. Level: intermediate.
 >
 > **In one paragraph.** Report exports were timing out for large accounts because the whole result was built in memory. The changes make the export stream rows in batches.
 >
@@ -35,7 +35,7 @@ These describe an invented small Python project. They show shape and tone, not r
 
 ## Deep (abridged)
 
-> Depth: deep (an interface change touching three modules).
+> Depth: deep (an interface change touching three modules). Level: advanced, so no concepts section.
 >
 > **In one paragraph.** Plugins used to register handlers by editing the router's dict. They now register through a `Registry`, so the router no longer knows about plugins at all.
 >
@@ -60,7 +60,7 @@ These describe an invented small Python project. They show shape and tone, not r
 
 ## History mode: `branch=retry-uploads` (abridged)
 
-> Depth: standard. History mode: `main..retry-uploads`, 4 commits.
+> Depth: standard. Level: intermediate. History mode: `main..retry-uploads`, 4 commits.
 >
 > **In one paragraph.** Uploads to object storage failed outright on any network error. The branch retries them with backoff, and stops retrying errors that can't succeed, such as a missing bucket.
 >
@@ -77,3 +77,20 @@ These describe an invented small Python project. They show shape and tone, not r
 > **Verification.** `test_retry.py` was added (6 tests). The CI checks on PR #41 passed. No test covers `upload()` itself with a failing network.
 >
 > **Scope.** Merge-base `e81d3b2`; changes merged in from `main` are excluded. Uncommitted work in the current checkout isn't included.
+
+## Level `"fluent in R, new to Python"` (abridged)
+
+> Depth: standard. Level: new-to-language, with comparisons to R (as you asked).
+>
+> **In one paragraph.** The dashboard re-read the same 200 MB CSV on every page refresh. It now reads each file once and reuses the result.
+>
+> **Concepts used here**
+> - **Decorators** (`@lru_cache` at [data.py:8](src/data.py#L8)). A line starting with `@` above a function wraps that function in another one when it's defined. It's like writing `load_table <- memoise::memoise(load_table)` in R, but placed above the definition.
+> - **`functools.lru_cache`**. Python's built-in equivalent of `memoise`: it remembers results by argument. Unlike `memoise`, the arguments must be *hashable* (strings, numbers, tuples; not lists or data frames). That's why `load_table` takes a file path, not a data frame.
+> - **`with` blocks** ([data.py:11](src/data.py#L11)). They open a resource and guarantee it's closed afterwards, even on an error. It's the job `on.exit(close(con))` does in an R function.
+>
+> **What changed, by purpose**
+> - *Cached loading.* `load_table(path)` is wrapped in `@lru_cache(maxsize=8)`, so the eight most recently used files stay in memory *(code)*.
+> - ...
+>
+> **Worth remembering.** The cache holds the *same* data frame object for every caller. If any caller modifies it in place (as `df["x"] = ...` does, much like R's `data.table` `:=` and unlike ordinary R assignment, which copies), every later caller sees the modified version.

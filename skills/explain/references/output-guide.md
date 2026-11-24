@@ -10,25 +10,26 @@ If `depth` wasn't given, pick from the grouped changes:
 | **standard** | Everything in between (the default when unsure) | About 500 words |
 | **deep** | Several interacting groups, an architecture or interface change, a migration, or concurrency or security implications | Up to about 1000 words |
 
-State the depth you chose in a few words, so the user can ask for more or less.
+State the depth and the level (see `levels.md`) in a few words at the start, so the user can ask for more or less.
 
 ## Standard structure
 
 Omit any section that would be empty.
 
 1. **In one paragraph**: the purpose of the changes and the problem they address.
-2. **What changed, by purpose**: per group, what the code did before, what it does now, and the key file:line references. Describe behaviour, not edits.
-3. **Why it was done this way**: the important decisions, and the alternatives where they are known. Label each with its evidence: *(code)*, *(stated)*, *(commit `sha`)*, *(PR #n)* or *(inferred)*.
-4. **How the pieces fit together**: how the changed components interact with each other and the existing code.
-5. **Limitations and knock-on effects**: what could break, assumptions made, anything now inconsistent elsewhere.
-6. **Verification**: tests added or changed, and tests actually run in this conversation with their real results. Name untested parts as gaps. If nothing was run, say "nothing was run". In history mode, report the PR's CI results instead (see `history-mode.md`).
-7. **How it got here** (history mode only, optional): what the commit sequence shows that the final diff hides. See `history-mode.md`.
-8. **Worth remembering**: 2-3 takeaways for the reader's mental model, such as "if you change X later, also update Y".
-9. **Not from this session** (session mode): changes present in git that this conversation didn't make, if any. In history mode this is the **Scope** note instead: the resolved range, what was excluded, and whether a PR was found.
+2. **Concepts used here** (not at `advanced`, and only when something qualifies): the language constructs, patterns and library APIs the reader needs in order to follow the change. See `levels.md`. Its words don't count towards the length limit.
+3. **What changed, by purpose**: per group, what the code did before, what it does now, and the key file:line references. Describe behaviour, not edits.
+4. **Why it was done this way**: the important decisions, and the alternatives where they are known. Label each with its evidence: *(code)*, *(stated)*, *(commit `sha`)*, *(PR #n)* or *(inferred)*.
+5. **How the pieces fit together**: how the changed components interact with each other and the existing code.
+6. **Limitations and knock-on effects**: what could break, assumptions made, anything now inconsistent elsewhere.
+7. **Verification**: tests added or changed, and tests actually run in this conversation with their real results. Name untested parts as gaps. If nothing was run, say "nothing was run". In history mode, report the PR's CI results instead (see `history-mode.md`).
+8. **How it got here** (history mode only, optional): what the commit sequence shows that the final diff hides. See `history-mode.md`.
+9. **Worth remembering**: 2-3 takeaways for the reader's mental model, such as "if you change X later, also update Y".
+10. **Not from this session** (session mode): changes present in git that this conversation didn't make, if any. In history mode this is the **Scope** note instead: the resolved range, what was excluded, and whether a PR was found.
 
 ## Brief
 
-A short paragraph: purpose, before and after, why (labelled if it isn't obvious), and verification. No headings.
+A short paragraph: purpose, before and after, why (labelled if it isn't obvious), and verification. No headings. Instead of a concepts section, gloss at most two concepts in parentheses at first mention (see `levels.md`).
 
 ## Deep
 
@@ -66,5 +67,6 @@ Prefer a short excerpt over a long description when the code is the clearest exp
 - Don't repeat the completion summary.
 - Plain prose, grouped under bold or `###` headings at standard and deep depth.
 - Name commit SHAs when there are any.
+- Match tone, analogies and snippet length to the level in `levels.md`.
 - No quizzes or exercises at this layer.
 - Don't write any files.

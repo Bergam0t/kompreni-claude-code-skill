@@ -1,7 +1,7 @@
 ---
 name: explain
 description: Explain code changes in depth, covering what changed, why, how the changed pieces interact with the existing code, and what to watch for. Works on the changes an AI agent made in this session, or on the changes on a git branch, in a commit, or since a commit. Use when the user asks for a deeper explanation of changes ("explain what you changed", "walk me through these changes", "explain this branch", "what did commit abc123 do?", "explain everything since v1.2"). Not for routine completion summaries; never run it automatically after a task.
-argument-hint: "[depth=brief|standard|deep] [branch=<name> [onto=<ref>] | since=<ref> | commit=<ref>] [focus=<path or topic>]"
+argument-hint: "[depth=brief|standard|deep] [level=new-to-programming|new-to-language|intermediate|advanced|<free text>] [branch=<name> [onto=<ref>] | since=<ref> | commit=<ref>] [focus=<path or topic>]"
 ---
 
 # Kompreni: explain the changes
@@ -17,6 +17,7 @@ This is not a restatement of your completion summary. Explain relationships, dec
 | Arg | Default | Notes |
 |---|---|---|
 | `depth` | auto | `brief`, `standard` or `deep`. See `references/output-guide.md` for how auto picks |
+| `level` | auto | The reader's prior knowledge of the language: `new-to-programming` (alias `beginner`), `new-to-language`, `intermediate` or `advanced`, or free text in quotes such as `"fluent in R, new to Python"`. Auto: what the user has said about their experience, otherwise `intermediate`. See `references/levels.md` |
 | `branch` | none | Explain what this branch adds over the default branch |
 | `onto` | default branch | With `branch`: the branch to compare against |
 | `since` | none | Explain the commits after this ref, up to HEAD |
@@ -51,7 +52,7 @@ Group by behaviour or capability, not by file. Tests go with the code they test.
 
 ## 5. Pick the depth and write
 
-Read `references/output-guide.md` for the depth rules, the section structure, the evidence labels and the style limits. `references/examples.md` has one illustrative example per depth.
+Read `references/output-guide.md` for the depth rules, the section structure, the evidence labels and the style limits. Read `references/levels.md` for the reader's level, which sets how much language and library background to explain. `references/examples.md` has illustrative examples of each depth and of a `new-to-language` explanation.
 
 Non-negotiable rules:
 
