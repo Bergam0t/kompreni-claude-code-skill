@@ -1,0 +1,15 @@
+{
+  "name": "kompreni",
+  "description": "Kompreni: understand what your AI coding agent changed",
+  "owner": {
+    "name": "Sammi Rosser",
+    "url": "https://github.com/Bergam0t"
+  },
+  "plugins": [
+    {
+      "name": "kompreni",
+      "source": "./",
+      "description": "Explain what an AI coding agent changed, why, and how the pieces fit together."
+    }
+  ]
+}
