@@ -10,6 +10,11 @@
       "name": "kompreni",
       "source": "./",
       "description": "Explain what an AI coding agent changed, why, and how the pieces fit together."
+    },
+    {
+      "name": "kompreni-offer",
+      "source": "./mods/kompreni-offer",
+      "description": "Optional mod: after a turn that edits files, offers a Kompreni explanation with depth and level pickers."
     }
   ]
 }

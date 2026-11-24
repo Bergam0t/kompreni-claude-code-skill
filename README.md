@@ -55,6 +55,10 @@ If you don't give a level, Kompreni uses what you've told Claude about your expe
 
 In history mode the conversation can't say why something was done, so the explanation draws on commit messages, the pull request (if the GitHub CLI `gh` is available) and the code. Each reason is labelled with its source. If the commit sequence shows an approach that was tried and replaced, or fixes made after review, it adds a short "How it got here". The skill never checks out, stashes or resets anything.
 
+### Optional: an offer after each change
+
+The [`kompreni-offer`](mods/kompreni-offer/) mod shows a row above the prompt after any turn that edited files, with depth and level pickers and an **Explain** button that fills in the command for you. It remembers your choices. The skill works fine without it.
+
 ## How it works
 
 - **Git** supplies what changed (including edits made through shell commands). **The conversation** supplies why.

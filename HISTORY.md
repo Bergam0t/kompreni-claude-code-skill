@@ -17,3 +17,7 @@
     - Presets: `new-to-programming` (alias `beginner`), `new-to-language`, `intermediate` (default) and `advanced`, or free text such as `"fluent in R, new to Python"`
     - A "Concepts used here" section explains the constructs, patterns and library APIs the change relies on, each tied to a real line
     - With no `level=`, uses what the user has said about their experience, and names the level used
+- Add the optional `kompreni-offer` mod
+    - After a turn that edits files, shows a row with depth and level pickers and an Explain button that fills in the command (never submits it, never overwrites a draft)
+    - Remembers the chosen depth and level across sessions; `/kompreni-offer` changes settings or turns offers off
+    - Listed in the marketplace as a separate, optional plugin

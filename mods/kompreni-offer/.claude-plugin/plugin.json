@@ -1,0 +1,11 @@
+{
+  "name": "kompreni-offer",
+  "version": "0.1.0",
+  "description": "After a turn that edits files, offers a Kompreni explanation with depth and level pickers. Optional companion to the kompreni plugin.",
+  "author": {
+    "name": "Sammi Rosser",
+    "url": "https://github.com/Bergam0t"
+  },
+  "license": "MIT",
+  "types": "./types/index.d.ts"
+}

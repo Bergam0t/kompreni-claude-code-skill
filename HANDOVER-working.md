@@ -27,7 +27,8 @@ Tracks [HANDOVER-original.md](HANDOVER-original.md): what has and hasn't been ac
 
 - [ ] §4 Layer 2 structured walkthroughs (Quarto)
 - [ ] §4 Layer 3 persistent knowledge, §9 Phases 3 and 5
-- [ ] §5 Claude Code mods and hooks, §9 Phase 4
+- [x] §5 / §9 Phase 4 first mod: `mods/kompreni-offer` (detect a turn with edits, offer an explanation, fill the command). Validated, type-checked and unit-tested; **not yet tried in a live session or in VS Code**
+- [ ] Mods: richer UI (a pane listing changed files, per-file explain), capture of Bash-made changes (e.g. a git snapshot per turn), access to earlier explanations
 - [ ] §5 Other agent integrations
 - [ ] §8 Name availability check (GitHub, registries, domains, trademark)
 - [ ] Link to codebase-tutorial: flag chapters made stale by a change (via `_generation.json`)

@@ -1,3 +1,6 @@
 .claude/settings.local.json
 __pycache__/
 *.pyc
+
+# Types Claude Code writes when it loads a mod
+mods/*/.claude-plugin/types/
