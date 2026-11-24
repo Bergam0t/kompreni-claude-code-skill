@@ -7,6 +7,9 @@ Reads the draft from stdin (or --file) and checks it against the repository:
   (``path/to/file.py:10-14`` or ``path/to/file.py:10-14@<git-ref>``) must
   match those lines exactly (ignoring indentation and trailing spaces).
   ``@<ref>`` reads the file as it was at that ref, for "before" snippets.
+* ``--ref <git-ref>`` reads every reference and snippet without its own
+  ``@<ref>`` from that ref instead of the working tree (for explaining a
+  branch or commit that isn't checked out).
 * Blocks whose info string contains ``illustrative`` are skipped.
 * Any other fenced block is reported as unmarked (a warning).
 * References written as ``[text](path#L42)``, ``[text](path#L42-L51)`` or
@@ -14,7 +17,7 @@ Reads the draft from stdin (or --file) and checks it against the repository:
   exists and a line range inside it.
 
 Exit status: 0 = no errors (warnings allowed), 1 = errors, 2 = bad usage.
-Standard library only; needs git on PATH only for ``@<ref>`` locations.
+Standard library only; needs git on PATH only for ``@<ref>`` and ``--ref``.
 """
 import argparse
 import re
@@ -74,6 +77,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--repo", default=".", help="repository root (default: current directory)")
     ap.add_argument("--file", help="read the draft from this file instead of stdin")
+    ap.add_argument("--ref", help="git ref to read files from instead of the working tree")
     args = ap.parse_args()
     repo = Path(args.repo).resolve()
     if not repo.is_dir():
@@ -113,13 +117,14 @@ def main():
         if not loc:
             warnings.append(f"{where}: code block has no location (add `path:LINE-LINE` or mark it `illustrative`)")
             continue
-        expected = check_range(repo, loc["path"], loc["a"], loc["b"], loc["ref"], where, errors)
+        ref = loc["ref"] or args.ref
+        expected = check_range(repo, loc["path"], loc["a"], loc["b"], ref, where, errors)
         if expected is None:
             continue
         checked_blocks += 1
         if norm(body) != norm(expected):
             errors.append(f"{where}: snippet does not match {loc['path']}:{loc['a']}-{loc['b'] or loc['a']}"
-                          + (f"@{loc['ref']}" if loc["ref"] else "")
+                          + (f"@{ref}" if ref else "")
                           + " (copy the lines exactly, or mark the block `illustrative`)")
 
     seen = set()
@@ -133,7 +138,7 @@ def main():
                 continue
             seen.add(key)
             refs += 1
-            check_range(repo, path, a, b, None, f"line {n}", errors)
+            check_range(repo, path, a, b, args.ref, f"line {n}", errors)
 
     for w in warnings:
         print(f"warning: {w}")

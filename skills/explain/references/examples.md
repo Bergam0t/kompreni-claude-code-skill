@@ -57,3 +57,23 @@ These describe an invented small Python project. They show shape and tone, not r
 > **Verification.** 31 tests pass; the new duplicate-route test is in `test_registry.py`. Import-order behaviour is untested.
 >
 > A structured walkthrough could be worth writing for a change this size.
+
+## History mode: `branch=retry-uploads` (abridged)
+
+> Depth: standard. History mode: `main..retry-uploads`, 4 commits.
+>
+> **In one paragraph.** Uploads to object storage failed outright on any network error. The branch retries them with backoff, and stops retrying errors that can't succeed, such as a missing bucket.
+>
+> **What changed, by purpose**
+> - *Retry wrapper.* `upload()` now calls `with_retry(send, attempts=4)` ([storage.py:61](src/storage.py#L61)); before, it called `send` once.
+> - *Which errors retry.* `is_retryable` treats timeouts and 5xx as retryable, and 4xx as final ([retry.py:12](src/retry.py#L12)).
+>
+> **Why this way.** Retries were added after uploads failed on flaky Wi-Fi *(PR #41)*. The 4xx rule came from review: "retrying a 403 just delays the error" *(PR #41)*. Four attempts is not explained anywhere *(inferred: a conventional default)*.
+>
+> **How it got here**
+> - The first version retried every exception (`3f1c2a0`). It was narrowed to `is_retryable` after review (`9be7d14`).
+> - Jitter was added in a separate commit, "avoid thundering herd" (`c02e5f9`) *(commit `c02e5f9`)*.
+>
+> **Verification.** `test_retry.py` was added (6 tests). The CI checks on PR #41 passed. No test covers `upload()` itself with a failing network.
+>
+> **Scope.** Merge-base `e81d3b2`; changes merged in from `main` are excluded. Uncommitted work in the current checkout isn't included.

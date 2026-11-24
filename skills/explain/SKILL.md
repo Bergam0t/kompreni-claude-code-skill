@@ -1,7 +1,7 @@
 ---
 name: explain
-description: Explain the changes an AI agent made in this session in depth, covering what changed, why, how the changed pieces interact with the existing code, and what to watch for. Use when the user asks for a deeper explanation of recent changes ("explain what you changed", "walk me through these changes", "help me understand this diff"). Not for routine completion summaries; never run it automatically after a task.
-argument-hint: "[depth=brief|standard|deep] [base=<git ref>] [focus=<path or topic>]"
+description: Explain code changes in depth, covering what changed, why, how the changed pieces interact with the existing code, and what to watch for. Works on the changes an AI agent made in this session, or on the changes on a git branch, in a commit, or since a commit. Use when the user asks for a deeper explanation of changes ("explain what you changed", "walk me through these changes", "explain this branch", "what did commit abc123 do?", "explain everything since v1.2"). Not for routine completion summaries; never run it automatically after a task.
+argument-hint: "[depth=brief|standard|deep] [branch=<name> [onto=<ref>] | since=<ref> | commit=<ref>] [focus=<path or topic>]"
 ---
 
 # Kompreni: explain the changes
@@ -17,14 +17,21 @@ This is not a restatement of your completion summary. Explain relationships, dec
 | Arg | Default | Notes |
 |---|---|---|
 | `depth` | auto | `brief`, `standard` or `deep`. See `references/output-guide.md` for how auto picks |
-| `base` | auto | Git ref to compare against. Auto: `HEAD` for uncommitted work, plus any commits made in this conversation |
+| `branch` | none | Explain what this branch adds over the default branch |
+| `onto` | default branch | With `branch`: the branch to compare against |
+| `since` | none | Explain the commits after this ref, up to HEAD |
+| `commit` | none | Explain this one commit |
 | `focus` | none | A path or topic. Explain only the changes relevant to it |
 
-## 2. Collect the changes
+Give at most one of `branch`, `since` and `commit`. If more than one is given, ask which was meant.
+
+**Modes.** With none of them, this is **session mode**: explain the changes made in this conversation (steps 2-6 below). With one of them, this is **history mode**: read `references/history-mode.md` now. It replaces step 2 and adjusts step 6.
+
+## 2. Collect the changes (session mode)
 
 Git is the source of truth for **what** changed (it catches edits made through Bash, scripts and codegen). This conversation is the source for **why**.
 
-Run, in one Bash call: `git status --porcelain`, `git diff --stat <base>`, and `git log --oneline -n 10`. Then:
+Run, in one Bash call: `git status --porcelain`, `git diff --stat HEAD`, and `git log --oneline -n 10`. Then:
 
 - Untracked files are changes too: read the new ones.
 - If this conversation committed, the baseline is the commit before the first one it made. Confirm with `git log`.
@@ -59,7 +66,7 @@ Non-negotiable rules:
 Never present a draft with unchecked references or snippets.
 
 1. Re-read each cited `file:line` and each quoted snippet against the working tree (or `git show <ref>:<path>` for "before" code). Line numbers drift after edits, so take them from the files, not from memory.
-2. Run the checker, passing the draft on stdin so that no file is created:
+2. Run the checker, passing the draft on stdin so that no file is created. In history mode, add `--ref <tip>` (see `references/history-mode.md`):
 
 ```
 python <skill>/scripts/check_refs.py --repo . <<'DRAFT'

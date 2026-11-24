@@ -23,11 +23,21 @@ After the agent has made changes:
 
 ```
 /kompreni:explain
-/kompreni:explain depth=deep
-/kompreni:explain base=main focus=src/api
+/kompreni:explain depth=deep focus=src/api
 ```
 
 You can also just ask, for example "walk me through what you changed". The skill never runs on its own after every task.
+
+### Explaining history: a branch, a commit, or a range
+
+```
+/kompreni:explain branch=feature-x              # what the branch adds over the default branch
+/kompreni:explain branch=feature-x onto=develop
+/kompreni:explain commit=abc1234
+/kompreni:explain since=v1.2.0
+```
+
+In history mode the conversation can't say why something was done, so the explanation draws on commit messages, the pull request (if the GitHub CLI `gh` is available) and the code. Each reason is labelled with its source. If the commit sequence shows an approach that was tried and replaced, or fixes made after review, it adds a short "How it got here". The skill never checks out, stashes or resets anything.
 
 ## How it works
 
@@ -44,4 +54,5 @@ You can also just ask, for example "walk me through what you changed". The skill
 
 ## Testing
 
-See [evals/README.md](evals/README.md).
+- Unit tests for the reference checker: `python -m unittest discover tests`
+- Manual scenarios and the scoring rubric: [evals/README.md](evals/README.md)

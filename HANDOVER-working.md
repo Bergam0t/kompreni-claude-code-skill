@@ -8,6 +8,8 @@ Tracks [HANDOVER-original.md](HANDOVER-original.md): what has and hasn't been ac
 - [x] §5 Skills: packaged as a plugin (`.claude-plugin/`), invoked as `/kompreni:explain`
 - [x] §7 Design principles built into the skill: proportionality, evidence labels, provenance, no forced files, portable (plain SKILL.md, no scripts)
 - [x] §7 Evidence-based / provenance: snippet rules plus `scripts/check_refs.py` (checks references and verbatim snippets; tested on a scratch repo only)
+- [x] History mode: `branch=`, `since=`, `commit=` (`references/history-mode.md`). This answers §10 Q4 in part: what can be reconstructed afterwards from git and PRs, as groundwork for Layer 3
+- [x] Unit tests for `check_refs.py` (`tests/`)
 - [x] §9 Phase 1 scaffolding: skill, examples, eval scenarios
 
 ## In progress / not yet verified
@@ -16,6 +18,7 @@ Tracks [HANDOVER-original.md](HANDOVER-original.md): what has and hasn't been ac
 - [ ] Check the frontmatter fields and `$ARGUMENTS` handling against current Claude Code skill docs
 - [ ] Run `claude plugin validate .`
 - [ ] Dogfood on a real session
+- [ ] History mode: run on `C:\geographic_playground_mini` (dry run of the git/gh commands done: default-branch fallback via `gh` works; `review-fixes` is merged as PR #2, merge commit `423fc80`; `stlite` has no commits beyond main) and scenarios 09-13; no full skill run yet
 - [ ] Check that agents actually run `check_refs.py` via the stdin heredoc in real sessions (long drafts, Windows quoting)
 - [ ] `check_refs.py` can't verify claims about behaviour, only that quoted code and references exist
 
@@ -27,6 +30,7 @@ Tracks [HANDOVER-original.md](HANDOVER-original.md): what has and hasn't been ac
 - [ ] §5 Other agent integrations
 - [ ] §8 Name availability check (GitHub, registries, domains, trademark)
 - [ ] Link to codebase-tutorial: flag chapters made stale by a change (via `_generation.json`)
+- [ ] History mode: `range=<A..B>` (raw git syntax) and `pr=<number>` (explain a PR directly, e.g. after a squash merge and branch deletion)
 - [ ] A change-collection script, only if scenarios show inline git steps are unreliable
 
 ## Open questions (§10)

@@ -18,12 +18,13 @@ Omit any section that would be empty.
 
 1. **In one paragraph**: the purpose of the changes and the problem they address.
 2. **What changed, by purpose**: per group, what the code did before, what it does now, and the key file:line references. Describe behaviour, not edits.
-3. **Why it was done this way**: the important decisions, and the alternatives where they are known. Label each *(code)*, *(stated)* or *(inferred)*.
+3. **Why it was done this way**: the important decisions, and the alternatives where they are known. Label each with its evidence: *(code)*, *(stated)*, *(commit `sha`)*, *(PR #n)* or *(inferred)*.
 4. **How the pieces fit together**: how the changed components interact with each other and the existing code.
 5. **Limitations and knock-on effects**: what could break, assumptions made, anything now inconsistent elsewhere.
-6. **Verification**: tests added or changed, and tests actually run in this conversation with their real results. Name untested parts as gaps. If nothing was run, say "nothing was run".
-7. **Worth remembering**: 2-3 takeaways for the reader's mental model, such as "if you change X later, also update Y".
-8. **Not from this session**: changes present in git that this conversation didn't make, if any.
+6. **Verification**: tests added or changed, and tests actually run in this conversation with their real results. Name untested parts as gaps. If nothing was run, say "nothing was run". In history mode, report the PR's CI results instead (see `history-mode.md`).
+7. **How it got here** (history mode only, optional): what the commit sequence shows that the final diff hides. See `history-mode.md`.
+8. **Worth remembering**: 2-3 takeaways for the reader's mental model, such as "if you change X later, also update Y".
+9. **Not from this session** (session mode): changes present in git that this conversation didn't make, if any. In history mode this is the **Scope** note instead: the resolved range, what was excluded, and whether a PR was found.
 
 ## Brief
 
@@ -37,6 +38,8 @@ Standard, plus a small ASCII flow in "How the pieces fit together" when it clari
 
 - *(code)*: visible in the diff or the surrounding code. Cite where.
 - *(stated)*: said by the user or you earlier in this conversation.
+- *(commit `abc1234`)*: from that commit's message. It's the author's claim, not verified fact.
+- *(PR #n)*: from that pull request's description or review comments.
 - *(inferred)*: your reasoning from the above. Say "probably" or "presumably". If you have no basis at all, say the reason isn't recorded.
 
 Don't attribute intent without one of these.
