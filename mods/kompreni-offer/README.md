@@ -3,8 +3,10 @@
 An optional companion to the `kompreni` skill. After a turn in which Claude edited files, it shows one row above the prompt:
 
 ```
-Kompreni: 3 files changed.  Depth [auto ▾]  Level [new-to-language ▾]  [Explain]  [Dismiss]
+Kompreni: 3 files changed since the last explanation.  Depth [auto ▾]  Level [new-to-language ▾]  [Explain]  [Dismiss]
 ```
+
+The count matches what the skill will explain: files edited since the last Kompreni explanation in this session, across however many turns. It resets when an explanation actually runs, whether you used the button, typed the command, or asked Claude in words. History-mode runs (`branch=`, `since=`, `commit=`) don't reset it. **Dismiss** hides the row until the next turn that edits something; the count carries on.
 
 **Explain** fills your prompt box with the command, e.g. `/kompreni:explain depth=deep level=new-to-language`. You press Enter. It never submits for you, and it never overwrites a draft you've started.
 

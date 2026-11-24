@@ -1,4 +1,5 @@
 import { expect, test } from 'claude-code/testing'
+import type { Engine } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
 import { buildPrompt, parseArgs } from '../hooks/register'
@@ -76,7 +77,7 @@ test('no band before any edit, a band after a turn that edited a file', async ($
 
   for (const surface of ['terminal', 'vscode', 'desktop'] as const) {
     const ui = await $.ui.mount({ ...BAND, surface })
-    expect((await ui.find({ type: 'Text', text: /Kompreni/ }))?.text).toBe('Kompreni: 1 file changed.')
+    expect((await ui.find({ type: 'Text', text: /Kompreni/ }))?.text).toBe('Kompreni: 1 file changed in this conversation.')
     expect(await ui.find({ key: 'explain' })).toBeDefined()
     await ui.unmount()
   }
@@ -149,4 +150,85 @@ test('a draft in the prompt box is never overwritten', async ($, on) => {
   expect(filled).toEqual([])
   expect(await ui.find({ key: 'explain' })).toBeDefined()
   await ui.unmount()
+})
+
+// Shared setup for the accumulation tests: the engine stubs, and helpers for a turn.
+const setUp = ($: Engine, on: On) => {
+  memoryStore(on)
+  on('tool.call', () => ({ result: {} }))
+  on('turn.complete', (_, e) => ({ text: e.answer }))
+  on('prompt.submit', (_, e) => ({ text: e.text }))
+  const editTurn = async (path: string) => {
+    await $.prompt.submit(typed('change something'))
+    await $.tool.call({ tool: 'Edit', file_path: path, old_string: 'a', new_string: 'b' })
+    await $.turn.complete(turn())
+  }
+  const rowText = async () => {
+    const ui = await $.ui.mount({ ...BAND, surface: 'vscode' })
+    const found = (await ui.find({ type: 'Text', text: /Kompreni/ }))?.text
+    await ui.unmount()
+    return found
+  }
+  return { editTurn, rowText }
+}
+
+test('edits accumulate across turns until an explanation runs', async ($, on) => {
+  const { editTurn, rowText } = setUp($, on)
+  await editTurn('/repo/a.py')
+  await editTurn('/repo/b.py')
+  await editTurn('/repo/a.py')
+  expect(await rowText()).toBe('Kompreni: 2 files changed in this conversation.')
+})
+
+test('a turn with no edits hides the row but keeps the count', async ($, on) => {
+  const { editTurn, rowText } = setUp($, on)
+  await editTurn('/repo/a.py')
+  await $.prompt.submit(typed('just a question'))
+  await $.turn.complete(turn())
+  expect(await rowText()).toBeUndefined()
+  await editTurn('/repo/b.py')
+  expect(await rowText()).toBe('Kompreni: 2 files changed in this conversation.')
+})
+
+test('a typed explain command resets the count', async ($, on) => {
+  const { editTurn, rowText } = setUp($, on)
+  await editTurn('/repo/a.py')
+  await $.prompt.submit({ ...typed('/kompreni:explain depth=brief'), command: { name: 'kompreni:explain', args: 'depth=brief' } })
+  await $.turn.complete(turn())
+  await editTurn('/repo/b.py')
+  expect(await rowText()).toBe('Kompreni: 1 file changed since the last explanation.')
+})
+
+test('Claude invoking the skill resets the count', async ($, on) => {
+  const { editTurn, rowText } = setUp($, on)
+  await editTurn('/repo/a.py')
+  await $.prompt.submit(typed('explain what you changed'))
+  await $.tool.call({ tool: 'Skill', skill: 'kompreni-explain', args: '' })
+  await $.turn.complete(turn())
+  await editTurn('/repo/b.py')
+  expect(await rowText()).toBe('Kompreni: 1 file changed since the last explanation.')
+})
+
+test('a history-mode explanation does not reset the count', async ($, on) => {
+  const { editTurn, rowText } = setUp($, on)
+  await editTurn('/repo/a.py')
+  await $.prompt.submit({ ...typed('/kompreni:explain branch=main'), command: { name: 'kompreni:explain', args: 'branch=main' } })
+  await $.tool.call({ tool: 'Skill', skill: 'kompreni:explain', args: 'commit=abc123' })
+  await $.turn.complete(turn())
+  await editTurn('/repo/b.py')
+  expect(await rowText()).toBe('Kompreni: 2 files changed in this conversation.')
+})
+
+test('filling the command without running it keeps the count', async ($, on) => {
+  const { editTurn, rowText } = setUp($, on)
+  on('command.list', () => ({ value: [command('kompreni:explain')] }))
+  on('prompt.read', () => ({ value: { text: '', cursor: 0 } }))
+  on('prompt.fill', (_, e) => ({ isFilled: true, text: e.text, cursor: e.text.length }))
+  await editTurn('/repo/a.py')
+  const ui = await $.ui.mount({ ...BAND, surface: 'vscode' })
+  await ui.press({ key: 'explain' })
+  await ui.unmount()
+  expect(await rowText()).toBeUndefined()
+  await editTurn('/repo/b.py')
+  expect(await rowText()).toBe('Kompreni: 2 files changed in this conversation.')
 })

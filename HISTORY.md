@@ -21,3 +21,7 @@
     - After a turn that edits files, shows a row with depth and level pickers and an Explain button that fills in the command (never submits it, never overwrites a draft)
     - Remembers the chosen depth and level across sessions; `/kompreni-offer` changes settings or turns offers off
     - Listed in the marketplace as a separate, optional plugin
+- Explain only what changed since the last explanation in the same conversation
+    - New `scope=` argument: `new` (default) covers changes since the previous Kompreni explanation, `all` gives one consolidated explanation of the whole conversation
+    - Each session-mode explanation ends with a `Kompreni snapshot:` line; `skills/explain/scripts/snapshot.py` records the working tree as a git tree without touching files, index, branches or stash, so later explanations catch every change, including ones made by shell commands
+    - The `kompreni-offer` mod now counts files changed since the last explanation across turns, and resets when an explanation runs by any route

@@ -1,10 +1,10 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import type { Offer } from '../types'
-
-// The offer for the turn that just ended; null when there is nothing to offer.
-const pending = atom({ plugin: 'kompreni-offer', key: 'pending' } as const, null)
+// Session state: files edited since the last explanation, and whether to show the row.
+const sinceExplain = atom({ plugin: 'kompreni-offer', key: 'sinceExplain' } as const, [])
+const isVisible = atom({ plugin: 'kompreni-offer', key: 'isVisible' } as const, false)
+const hasExplained = atom({ plugin: 'kompreni-offer', key: 'hasExplained' } as const, false)
 
 // Settings kept across sessions in $.store.
 const LEVEL = 'level'
@@ -18,6 +18,8 @@ const LEVELS = ['auto', 'new-to-programming', 'new-to-language', 'intermediate',
 const KNOWN_COMMANDS = ['kompreni:explain', 'kompreni-explain']
 
 const EDIT_TOOLS = new Set(['Edit', 'Write', 'NotebookEdit'])
+// History-mode runs explain a branch or commits, not this session's edits.
+const HISTORY_ARGS = /\b(branch|since|commit)=/
 
 const text = (value: unknown, fallback: string) =>
   typeof value === 'string' && value !== '' ? value : fallback
@@ -48,10 +50,24 @@ async function resolveCommand($: EngineInterface): Promise<string | undefined> {
   return KNOWN_COMMANDS.find(name => names.has(name))
 }
 
+/** Whether a run of `name` with `args` is a session-mode Kompreni explanation. */
+async function isSessionExplain($: EngineInterface, name: string, args: string): Promise<boolean> {
+  const chosen = await $.store.get(COMMAND)
+  const isExplain = KNOWN_COMMANDS.includes(name) || name === chosen
+  return isExplain && !HISTORY_ARGS.test(args)
+}
+
+/** An explanation ran: what it covered no longer counts as unexplained. */
+async function markExplained($: EngineInterface): Promise<void> {
+  await update($, sinceExplain, () => [])
+  await update($, isVisible, () => false)
+  await update($, hasExplained, () => true)
+}
+
 export const register: Register = on => {
-  // Module variable: the files edited since the last prompt. A reload resets it,
-  // which at worst skips one offer.
-  let edited = new Set<string>()
+  // Edits in the current turn, so an offer appears only after a turn that changed something.
+  // A reload resets it, which at worst skips one offer.
+  let turnEdits = 0
 
   on('session.start', async ($, e, next) => {
     await $.command.register({
@@ -63,17 +79,26 @@ export const register: Register = on => {
   })
 
   on('prompt.submit', async ($, e, next) => {
-    edited = new Set()
-    await update($, pending, () => null)
+    turnEdits = 0
+    await update($, isVisible, () => false)
+    if (e.command !== undefined && (await isSessionExplain($, e.command.name, e.command.args))) {
+      await markExplained($)
+    }
     return next(e)
   }).catch(($, e, next) => next(e)) // never block a prompt over a failed offer
 
   on('tool.call', async ($, e, next) => {
     const ran = await next(e)
-    if (EDIT_TOOLS.has(e.tool) && ran.deny === undefined && ran.isError !== true) {
-      const input = e as unknown as { file_path?: string; notebook_path?: string }
+    if (ran.deny !== undefined || ran.isError === true) return ran
+    const input = e as unknown as { file_path?: string; notebook_path?: string; skill?: string; args?: string }
+    if (EDIT_TOOLS.has(e.tool)) {
       const path = input.file_path ?? input.notebook_path
-      if (path !== undefined) edited.add(path)
+      if (path !== undefined) {
+        turnEdits += 1
+        await update($, sinceExplain, files => (files.includes(path) ? files : [...files, path]))
+      }
+    } else if (e.tool === 'Skill' && input.skill !== undefined) {
+      if (await isSessionExplain($, input.skill, input.args ?? '')) await markExplained($)
     }
     return ran
   }).catch(($, e, next) => next(e)) // never block or change a tool call
@@ -82,9 +107,8 @@ export const register: Register = on => {
     const done = await next(e)
     const isMainAnswer = e.agentId === undefined && e.reason === 'answer'
     const isEnabled = text(await $.store.get(ENABLED), 'on') === 'on'
-    if (isMainAnswer && isEnabled && edited.size > 0) {
-      const offer: Offer = { files: [...edited] }
-      await update($, pending, () => offer)
+    if (isMainAnswer && isEnabled && turnEdits > 0) {
+      await update($, isVisible, () => true)
     }
     return done
   }).catch(($, e, next) => next(e))
@@ -101,25 +125,28 @@ export const register: Register = on => {
     if (args.command !== undefined) await $.store.set(COMMAND, args.command.replace(/^\//, ''))
 
     const command = (await resolveCommand($)) ?? 'not found (set command=)'
+    const pending = (await read($, sinceExplain)).length
     const lines = [
       `Kompreni offer: ${text(await $.store.get(ENABLED), 'on')}`,
       `depth: ${text(await $.store.get(DEPTH), 'auto')}`,
       `level: ${text(await $.store.get(LEVEL), 'auto')}`,
       `command: /${command}`,
+      `files changed since the last explanation: ${pending}`,
       ...errors,
     ]
     return { text: lines.join('\n') }
   })
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
-    const offer = await read($, pending)
-    if (e.props.hasSurvey || offer === null) return next(e)
+    const files = await read($, sinceExplain)
+    if (e.props.hasSurvey || !(await read($, isVisible)) || files.length === 0) return next(e)
 
     const depth = text(await $.store.get(DEPTH), 'auto')
     const level = text(await $.store.get(LEVEL), 'auto')
     const levels = LEVELS.includes(level) ? LEVELS : [...LEVELS, level]
+    const since = (await read($, hasExplained)) ? 'since the last explanation' : 'in this conversation'
     const { Box, Button, Select, Text } = $.ui.resolve(e)
-    const n = offer.files.length
+    const n = files.length
 
     const explain = async () => {
       const command = await resolveCommand($)
@@ -136,13 +163,14 @@ export const register: Register = on => {
       const chosenDepth = text(await $.store.get(DEPTH), 'auto')
       const chosenLevel = text(await $.store.get(LEVEL), 'auto')
       const filled = await $.prompt.fill({ text: buildPrompt(command, chosenDepth, chosenLevel) })
-      if (filled.isFilled) await update($, pending, () => null)
+      // The count resets when the explanation actually runs, not here.
+      if (filled.isFilled) await update($, isVisible, () => false)
     }
 
     return (
       <Box flexDirection="row" gap={1}>
         <Text dimColor>
-          Kompreni: {n} file{n === 1 ? '' : 's'} changed.
+          Kompreni: {n} file{n === 1 ? '' : 's'} changed {since}.
         </Text>
         <Select
           key="depth"
@@ -159,7 +187,7 @@ export const register: Register = on => {
           onSelect={value => void $.store.set(LEVEL, value)}
         />
         <Button key="explain" label="Explain" onPress={() => void explain()} />
-        <Button key="dismiss" label="Dismiss" onPress={() => void update($, pending, () => null)} />
+        <Button key="dismiss" label="Dismiss" onPress={() => void update($, isVisible, () => false)} />
       </Box>
     )
   })

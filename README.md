@@ -28,6 +28,8 @@ After the agent has made changes:
 
 You can also just ask, for example "walk me through what you changed". The skill never runs on its own after every task.
 
+**Several explanations in one conversation.** Each explanation covers only what changed since the previous one, and says how the new changes interact with the earlier ones. Use `scope=all` for one consolidated explanation of everything the conversation changed, e.g. before committing. To make "since the previous one" reliable, each explanation ends with a line like `Kompreni snapshot: tree=4f2a91c… head=51d0a3b…`. That's a git snapshot of your working tree, taken without changing your files, index, branches or stash. Its only side effect is unreferenced objects inside `.git`, which git cleans up in time. Untracked files over 5 MB are left out of it.
+
 ### Matching your experience
 
 ```
@@ -57,7 +59,7 @@ In history mode the conversation can't say why something was done, so the explan
 
 ### Optional: an offer after each change
 
-The [`kompreni-offer`](mods/kompreni-offer/) mod shows a row above the prompt after any turn that edited files, with depth and level pickers and an **Explain** button that fills in the command for you. It remembers your choices. The skill works fine without it.
+The [`kompreni-offer`](mods/kompreni-offer/) mod shows a row above the prompt after any turn that edited files, counting the files changed since the last explanation, with depth and level pickers and an **Explain** button that fills in the command for you. It remembers your choices. The skill works fine without it.
 
 ## How it works
 
@@ -74,5 +76,6 @@ The [`kompreni-offer`](mods/kompreni-offer/) mod shows a row above the prompt af
 
 ## Testing
 
-- Unit tests for the reference checker: `python -m unittest discover tests`
+- Unit tests for the reference checker and the snapshot script: `python -m unittest discover tests`
+- Mod tests: `claude plugin test mods/kompreni-offer`
 - Manual scenarios and the scoring rubric: [evals/README.md](evals/README.md)

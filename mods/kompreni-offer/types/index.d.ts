@@ -1,11 +1,15 @@
-/** The offer shown after a turn that edited files. */
-export type Offer = {
-  /** Paths edited during the turn, by the main loop or its subagents. */
-  files: string[]
-}
+/** Marks this file as a module so the declaration below augments 'claude-code'. */
+export type KompreniOfferFiles = string[]
 
 declare module 'claude-code' {
   interface PluginState {
-    'kompreni-offer': { pending: Offer | null }
+    'kompreni-offer': {
+      /** Paths edited since the last Kompreni explanation in this session. */
+      sinceExplain: KompreniOfferFiles
+      /** Whether the offer row is showing. */
+      isVisible: boolean
+      /** Whether an explanation has run in this session (changes the row's wording). */
+      hasExplained: boolean
+    }
   }
 }

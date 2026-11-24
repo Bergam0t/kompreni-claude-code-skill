@@ -10,7 +10,7 @@ If `depth` wasn't given, pick from the grouped changes:
 | **standard** | Everything in between (the default when unsure) | About 500 words |
 | **deep** | Several interacting groups, an architecture or interface change, a migration, or concurrency or security implications | Up to about 1000 words |
 
-State the depth and the level (see `levels.md`) in a few words at the start, so the user can ask for more or less.
+State the depth and the level (see `levels.md`) in a few words at the start, so the user can ask for more or less. When the explanation covers only changes since an earlier one (`scope=new`), say so in the same line, e.g. "Changes since the last explanation.".
 
 ## Standard structure
 
@@ -26,10 +26,11 @@ Omit any section that would be empty.
 8. **How it got here** (history mode only, optional): what the commit sequence shows that the final diff hides. See `history-mode.md`.
 9. **Worth remembering**: 2-3 takeaways for the reader's mental model, such as "if you change X later, also update Y".
 10. **Not from this session** (session mode): changes present in git that this conversation didn't make, if any. In history mode this is the **Scope** note instead: the resolved range, what was excluded, and whether a PR was found.
+11. **Snapshot line** (session mode, always the last line, even at `brief` depth): `Kompreni snapshot: tree=<sha> head=<sha>`. The next explanation uses it to cover only what changed since. Keep it exactly in this form.
 
 ## Brief
 
-A short paragraph: purpose, before and after, why (labelled if it isn't obvious), and verification. No headings. Instead of a concepts section, gloss at most two concepts in parentheses at first mention (see `levels.md`).
+A short paragraph: purpose, before and after, why (labelled if it isn't obvious), and verification. No headings, but still end with the snapshot line. Instead of a concepts section, gloss at most two concepts in parentheses at first mention (see `levels.md`).
 
 ## Deep
 

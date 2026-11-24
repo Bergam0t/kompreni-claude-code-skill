@@ -5,6 +5,8 @@ These describe an invented small Python project. They show shape and tone, not r
 ## Brief
 
 > Depth: brief. Level: intermediate. `parse_date` in [dates.py:14](src/dates.py#L14) crashed on an empty string because it indexed `s[0]` before checking length. It now returns `None` for empty or whitespace-only input *(code)*, and its one caller, `load_row`, already treats `None` as "skip this row" ([loader.py:31](src/loader.py#L31)), so blank cells are now skipped instead of aborting the import. A regression test was added in `tests/test_dates.py`; I ran the full suite (42 passed). Non-date garbage such as `"abc"` still raises, which wasn't touched.
+>
+> Kompreni snapshot: tree=8c1f2e0 head=51d0a3b
 
 ## Standard
 
@@ -32,6 +34,8 @@ These describe an invented small Python project. They show shape and tone, not r
 > **Verification.** 6 tests in `test_report.py` pass. Nothing exercised the API endpoint or `email_summary`.
 >
 > **Worth remembering.** `build_report` is now a generator: anything that indexes it or takes its length needs updating.
+>
+> Kompreni snapshot: tree=e4b7a19 head=51d0a3b
 
 ## Deep (abridged)
 
@@ -57,6 +61,8 @@ These describe an invented small Python project. They show shape and tone, not r
 > **Verification.** 31 tests pass; the new duplicate-route test is in `test_registry.py`. Import-order behaviour is untested.
 >
 > A structured walkthrough could be worth writing for a change this size.
+>
+> Kompreni snapshot: tree=3a9d0c7 head=b62f114
 
 ## History mode: `branch=retry-uploads` (abridged)
 
@@ -94,3 +100,9 @@ These describe an invented small Python project. They show shape and tone, not r
 > - ...
 >
 > **Worth remembering.** The cache holds the *same* data frame object for every caller. If any caller modifies it in place (as `df["x"] = ...` does, much like R's `data.table` `:=` and unlike ordinary R assignment, which copies), every later caller sees the modified version.
+
+## A second explanation in the same conversation (`scope=new`, abridged)
+
+> Depth: brief. Level: intermediate. Changes since the last explanation (snapshot `e4b7a19`). Since then, `email_summary` was fixed to work with the new generator: it now counts rows as it iterates instead of calling `len(report)` ([mail.py:17](src/mail.py#L17)) *(code)*, which resolves the limitation noted last time. A test feeding it a two-batch report was added and passes (7 passed in `test_mail.py`).
+>
+> Kompreni snapshot: tree=91c3d55 head=51d0a3b
