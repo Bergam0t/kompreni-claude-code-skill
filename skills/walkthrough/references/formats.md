@@ -136,6 +136,7 @@ It retries twice and returns the third response. See [How it works now](#how-it-
 
 If the repo (or a parent folder) has a `_quarto.yml`, a `.qmd` in `kompreni/walkthroughs/` belongs to that project:
 - `quarto render <file>` writes the HTML into the project's output folder (e.g. `_site/kompreni/walkthroughs/`), not next to the file;
-- a website project's next full render includes the walkthroughs as pages.
+- a website project's next full render includes the walkthroughs as pages;
+- a page-level theme would override the site's own, so the front matter leaves out the light/dark theme settings there (see `front-matter.md`).
 
 That's why `render=auto` skips rendering there. Mention the second point in the reply the first time you write into such a repo, so the user can exclude the folder in `_quarto.yml` (`project: render:`) if they don't want walkthroughs on their site.

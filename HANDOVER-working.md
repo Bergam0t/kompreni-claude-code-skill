@@ -39,6 +39,16 @@ Tracks [HANDOVER-original.md](HANDOVER-original.md): what has and hasn't been ac
 - [x] §9 Phase 4 "allow the user to request a Quarto walkthrough": Walkthrough and Code tour buttons in `kompreni-offer` (mod 0.1.3). A session-mode walkthrough resets the count. Tests pass (`claude plugin test`); **not tried live**, and not type-checked (no `tsc` here, and the API types are only written when Claude Code loads the mod)
 - [x] Uncommitted changes: before writing, the walkthrough asks whether to commit first, with a one-line reason and the files and message it would use. It commits only the session's own changes, never pushes or skips hooks; a "no" gives the existing `dirty: true` walkthrough. Scenarios 26 (no) and 31 (yes), rubric item 20
 - [x] "Useful elsewhere" section in explanations, walkthroughs and code tours (`skills/explain/references/useful-elsewhere.md`): transferable gotchas, patterns and techniques, each grounded in the change, with an item limit and omitted when nothing qualifies. New *(observed)* evidence label. Walkthroughs list the items as `kompreni.lessons` in the front matter. Scenarios 32-33, rubric item 21; not yet run. The two dogfood walkthroughs predate it
+- [x] Light/dark mode for rendered `.qmd` walkthroughs and code tours (`references/front-matter.md`): `theme: {light: flatly, dark: darkly}` plus `respect-user-color-scheme: true`, and a small inline `<style>` for mermaid. Left out inside an existing Quarto project. Scenarios 23, 27 and 28 updated; both dogfood walkthroughs re-rendered
+    - Quarto 1.11 findings, by rendering and headless Edge screenshots in both schemes:
+        - the page starts in the system scheme and follows live changes until the reader uses the toggle (then localStorage wins);
+        - a standalone doc with a TOC gets a floating toggle in the top right;
+        - with `darkly`, mermaid labels use `$primary` (dark blue on dark) and edges are #434343, so they are near-invisible;
+        - subgraph boxes are near-black even in light mode (`--mermaid-fg-color--lightest` is derived from the body colour);
+        - mermaid's own edge-label background stays light grey in dark mode;
+        - the `<style>` fixes all of these through Quarto's runtime `--mermaid-*` CSS variables, so they switch with the toggle;
+        - the self-contained HTML grows by about 2 MB, because both theme bundles are embedded.
+    - Not tried by a reader in a real browser, only through headless screenshots. The toggle click itself was not exercised
 - [ ] Scenarios 22-31 not yet run, in particular by a fresh agent (`claude --plugin-dir .`) with no prior context
 - [ ] Code tours of large changes (the 600-line rule) not yet tried
 - [ ] A code tour's teaching value not yet judged by anyone but its author

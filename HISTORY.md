@@ -55,6 +55,10 @@
     - Up to 2 items in a standard explanation, 3 in a deep one, 5 in a full walkthrough; a brief explanation gets at most one sentence
     - Walkthroughs also list the items in the front matter as `kompreni.lessons`, so they can be searched across walkthroughs later
     - New evidence label *(observed)* for what was seen happening in the session, such as an error or a test result
+- Rendered Quarto walkthroughs and code tours have a light/dark toggle, and open in the reader's system colour scheme
+    - Uses Quarto's `flatly`/`darkly` theme pair with `respect-user-color-scheme`; the toggle sits in the top right and remembers the reader's choice
+    - Fixes mermaid diagram colours that Quarto's defaults get wrong: dark blue labels and faint arrows in dark mode, near-black subgraph boxes in both modes
+    - Inside an existing Quarto project the walkthrough leaves these settings out, so the site's own theme applies
 - The `kompreni-offer` mod gains **Walkthrough** and **Code tour** buttons (mod version 0.1.3)
     - They fill in `/kompreni:walkthrough` (with `code=all` for Code tour), with the chosen level, and the depth only if it's `standard` or `deep`; never a scope
     - Shown only when the walkthrough skill is installed, on both the full and the one-line row; never overwrite a draft

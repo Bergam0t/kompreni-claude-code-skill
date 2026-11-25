@@ -22,7 +22,7 @@ Keep these sections from `structure.md`:
 
 Replace "What changed" and "How it works now" with a **Code tour** section (`## Code tour {#sec-tour}`).
 
-Front matter: as in `front-matter.md`, but with `code-annotations: below` instead of `hover`, and `kompreni.code: all`. With `below`, the explanations sit under each block, and clicking an item highlights its lines. That suits a tour, where the explanations are the point.
+Front matter: as in `front-matter.md` (including the light/dark theme and the mermaid `<style>`), but with `code-annotations: below` instead of `hover`, and `kompreni.code: all`. With `below`, the explanations sit under each block, and clicking an item highlights its lines. That suits a tour, where the explanations are the point.
 
 ```yaml illustrative
 format:
@@ -30,6 +30,13 @@ format:
     embed-resources: true
     toc: true
     code-annotations: below
+    theme:
+      light: flatly
+      dark: darkly
+    respect-user-color-scheme: true
+    include-in-header:
+      text: |
+        ...the <style> block from front-matter.md, unchanged...
 ```
 
 ## The tour

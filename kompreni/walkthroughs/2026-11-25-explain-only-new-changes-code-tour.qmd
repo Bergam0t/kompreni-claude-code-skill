@@ -6,6 +6,17 @@ format:
     embed-resources: true
     toc: true
     code-annotations: below
+    theme:
+      light: flatly
+      dark: darkly
+    respect-user-color-scheme: true
+    include-in-header:
+      text: |
+        <style>
+        body { --mermaid-fg-color--lightest: rgba(128,128,128,.08); --mermaid-fg-color--lighter: #adb5bd; }
+        body.quarto-dark { --mermaid-label-fg-color: #fff; --mermaid-edge-color: #adb5bd; }
+        body.quarto-dark :is(.edgeLabel, .edgeLabel p, .labelBkg) { background-color: var(--mermaid-label-bg-color) !important; }
+        </style>
 kompreni:
   schema: 1
   kind: walkthrough

@@ -13,6 +13,17 @@ format:
     embed-resources: true
     toc: true
     code-annotations: hover
+    theme:
+      light: flatly
+      dark: darkly
+    respect-user-color-scheme: true
+    include-in-header:
+      text: |
+        <style>
+        body { --mermaid-fg-color--lightest: rgba(128,128,128,.08); --mermaid-fg-color--lighter: #adb5bd; }
+        body.quarto-dark { --mermaid-label-fg-color: #fff; --mermaid-edge-color: #adb5bd; }
+        body.quarto-dark :is(.edgeLabel, .edgeLabel p, .labelBkg) { background-color: var(--mermaid-label-bg-color) !important; }
+        </style>
 kompreni:
   schema: 1
   kind: walkthrough
@@ -43,7 +54,7 @@ The same, without the `format:` key.
 |---|---|---|
 | `title` | yes | Names the purpose, not the files. Double-quoted; escape `"` inside as `\"` |
 | `date` | yes | Today, `YYYY-MM-DD` |
-| `format` | `qmd` only | Exactly as above. `embed-resources` makes the HTML one self-contained file |
+| `format` | `qmd` only | Exactly as above. `embed-resources` makes the HTML one self-contained file. `theme` with `light` and `dark` adds Quarto's light/dark toggle (top right), and `respect-user-color-scheme` starts in the reader's system setting until they use the toggle. The `<style>` fixes mermaid colours that Quarto gets wrong: in dark mode, labels in the theme's dark blue and near-invisible arrows; in both modes, near-black subgraph boxes. Copy it unchanged. **Inside an existing Quarto project** (see `formats.md`), leave out `theme`, `respect-user-color-scheme` and `include-in-header`, so the site's own theme applies |
 | `kompreni.schema` | yes | `1` |
 | `kompreni.kind` | yes | `walkthrough` |
 | `kompreni.summary` | yes | One sentence: what changed and why, in behaviour terms. Written for someone scanning a list of walkthroughs |
