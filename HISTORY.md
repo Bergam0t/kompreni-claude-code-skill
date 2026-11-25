@@ -35,7 +35,7 @@
     - Teaches rather than reports: the problem first, one running example traced before and after, annotated excerpts, before/after tabs, a diagram only when the flow changed, and questions with hidden, checked answers (`quiz=off` to omit)
     - `.qmd` when Quarto is installed, otherwise `.md`; `format=` overrides. A `.qmd` is rendered to one self-contained HTML file (gitignored), except inside an existing Quarto project
     - Shares session and history mode, `level=` and `focus=` with explain; covers the whole conversation by default; asks before writing one for a small change
-    - Uncommitted changes are written up with a visible drift note; committed, pushed tips get GitHub permalinks
+    - Asks before writing up uncommitted changes whether to commit them first, briefly saying why and what it would commit (only the session's own changes, never pushed). If not, the walkthrough carries a visible drift note; committed, pushed tips get GitHub permalinks
     - YAML front matter (`kompreni:` with range, commits, files, level, tests) as the starting point for searchable change history
     - Deep explanations now end by offering the matching walkthrough command
 - `check_refs.py` understands Quarto code blocks (`filename="path:lines"` captions, `.illustrative`, `{mermaid}`, annotation markers), errors on executable `{python}` cells, skips YAML front matter, and checks GitHub permalinks at their commit

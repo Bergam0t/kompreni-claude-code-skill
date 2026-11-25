@@ -37,7 +37,8 @@ Tracks [HANDOVER-original.md](HANDOVER-original.md): what has and hasn't been ac
     - `check_refs.py`: annotation integrity, `startFrom`, and `--coverage BASE[..TIP]`
     - Dogfood: `kompreni/walkthroughs/2026-11-25-explain-only-new-changes-code-tour.qmd`. 36 annotated blocks; every annotation's highlighted lines were verified against the HTML
 - [x] §9 Phase 4 "allow the user to request a Quarto walkthrough": Walkthrough and Code tour buttons in `kompreni-offer` (mod 0.1.3). A session-mode walkthrough resets the count. Tests pass (`claude plugin test`); **not tried live**, and not type-checked (no `tsc` here, and the API types are only written when Claude Code loads the mod)
-- [ ] Scenarios 22-30 not yet run, in particular by a fresh agent (`claude --plugin-dir .`) with no prior context
+- [x] Uncommitted changes: before writing, the walkthrough asks whether to commit first, with a one-line reason and the files and message it would use. It commits only the session's own changes, never pushes or skips hooks; a "no" gives the existing `dirty: true` walkthrough. Scenarios 26 (no) and 31 (yes), rubric item 20
+- [ ] Scenarios 22-31 not yet run, in particular by a fresh agent (`claude --plugin-dir .`) with no prior context
 - [ ] Code tours of large changes (the 600-line rule) not yet tried
 - [ ] A code tour's teaching value not yet judged by anyone but its author
 - [ ] GFM output not yet viewed on GitHub (alerts, mermaid, `<details>`)

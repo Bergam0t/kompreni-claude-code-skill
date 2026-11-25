@@ -82,7 +82,7 @@ For a substantial change, `/kompreni:walkthrough` writes a guided walkthrough to
     - the decisions with their evidence, honest verification, limitations, and a few questions with hidden answers (`quiz=off` to leave them out).
 - **Code tour** (`code=all`): instead of a few key excerpts, it shows all the substantive changed code, with a little context, in order of the call flow. It uses Quarto code annotations: numbered markers on the lines, with explanations below each block that highlight their lines when clicked. Line numbers match the real files. Test changes are annotated inside collapsed sections, and housekeeping is summarised. A `--coverage` check confirms that every changed line is either shown or listed as not toured. Quarto only.
 - **Proportionate**: for a small change it suggests `/kompreni:explain` instead, and asks before writing.
-- **Uncommitted changes** are fine. The walkthrough notes that line references point at the working tree as it was, and may drift. Committing first gives stable references and, on GitHub, permalinks.
+- **Uncommitted changes**: Claude asks whether to commit them first, saying what it would commit and with what message. A walkthrough tied to a commit keeps references that can always be checked and, on GitHub, permalinks. Only the session's own changes are committed, and nothing is pushed. If you say no, the walkthrough notes that its line references point at the working tree as it was, and may drift.
 - **Front matter** records the range, commits, files, level and tests (`kompreni:` in the YAML). This is the start of Kompreni's searchable change history.
 
 The skill shares `level=`, `focus=` and history mode with `/kompreni:explain`. It covers the whole conversation by default (`scope=all`).

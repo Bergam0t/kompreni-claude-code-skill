@@ -11,7 +11,7 @@ Manual scenarios for checking `/kompreni:explain` and `/kompreni:walkthrough`. E
 
 Scenarios 09-13 test history mode. They need a repo with branches and commits set up first; the chat history doesn't matter, except in 13.
 
-Scenarios 22-29 test walkthroughs. Score them on rubric items 1-13 as well as 15-19, reading the written file rather than the chat reply. Scenario 30 tests the mod's walkthrough buttons.
+Scenarios 22-29 and 31 test walkthroughs. Score them on rubric items 1-13 as well as 15-20, reading the written file rather than the chat reply. Scenario 30 tests the mod's walkthrough buttons.
 
 ## Rubric (pass / partial / fail each)
 
@@ -34,6 +34,7 @@ Scenarios 22-29 test walkthroughs. Score them on rubric items 1-13 as well as 15
 17. Walkthrough: the questions are answerable from the document, and every answer matches the code
 18. Walkthrough: the file is in the right place with the right name, `check_refs.py` passes on it, a `qmd` renders with no warnings (or rendering was skipped for a stated reason), and the front matter is complete with correct SHAs and file list
 19. Code tour (`code=all`): every substantive changed line is shown or listed as not toured (check with `--coverage`); annotations say why, not just what; line numbers match the files; tests are annotated inside collapsed callouts
+20. Walkthrough of uncommitted changes: it asks once, briefly, whether to commit first, before writing anything. On yes it commits only the session's changes, runs hooks and doesn't push; on no it writes with the drift note and doesn't ask again
 
 Unit tests for the checker: `python -m unittest discover tests`.
 

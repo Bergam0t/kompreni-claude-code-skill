@@ -35,7 +35,7 @@ This skill shares its change collection, grouping, evidence rules, levels and ch
 Read `<explain>/SKILL.md` and follow its step 2 (session mode) or, in history mode, `<explain>/references/history-mode.md` sections 1-4. That includes taking the snapshot in session mode. Differences:
 
 - The default scope is `all`. With `scope=new`, a previous walkthrough's `Kompreni snapshot:` line counts as a baseline like an explanation's.
-- **Uncommitted changes** (session mode with a dirty tree, or `since=` with uncommitted work you are including): write the walkthrough anyway, but references then point at the working tree as it is now and will drift once the code changes. Record `dirty: true` (see `references/front-matter.md`), put the drift note from `references/formats.md` at the top of the document, and mention in the reply that committing first gives stable references.
+- **Uncommitted changes** (session mode with a dirty tree, or `since=` with uncommitted work you are including): step 4 asks whether to commit them first. If they stay uncommitted, write the walkthrough anyway, but references then point at the working tree as it is now and will drift once the code changes. Record `dirty: true` (see `references/front-matter.md`) and put the drift note from `references/formats.md` at the top of the document.
 
 Then read for context and group by purpose, as in explain's steps 3 and 4.
 
@@ -43,7 +43,11 @@ Then read for context and group by purpose, as in explain's steps 3 and 4.
 
 If nothing changed, say so and stop. Write no file.
 
-## 4. Proportionality gate
+## 4. Before writing: size, and uncommitted changes
+
+Both checks below may need to ask the user something. If both do, ask in one message, and write nothing until they answer.
+
+### Size
 
 Decide the size by explain's rules in `<explain>/references/output-guide.md` ("Choosing the depth"), unless `depth` was given.
 
@@ -52,6 +56,23 @@ Decide the size by explain's rules in `<explain>/references/output-guide.md` ("C
 - **deep**: a full walkthrough.
 
 Length bands and which sections merge in a short walkthrough are in `references/structure.md`.
+
+### Uncommitted changes: offer to commit first
+
+This applies when the walkthrough would cover uncommitted changes (see step 2). It never applies with `branch=` or `commit=`. Skip it if the user has already said whether to commit, for example "write it up, but don't commit".
+
+Ask whether to commit first, with the reason in a sentence or two, and what you would commit, so that one "yes" is enough. For example:
+
+> These changes aren't committed yet. Shall I commit them first? A walkthrough tied to a commit keeps its line references and code excerpts checkable later, can link to the code on GitHub once pushed, and doesn't need a warning that its references may have drifted. I'd commit `src/upload.py` and `tests/test_upload.py` as "Retry failed uploads with backoff". Otherwise I'll write it against the working tree, with that warning.
+
+- **What to commit**: only the changes this walkthrough covers that this session made. Name the user's own uncommitted work (explain's attribution check) separately, and leave it out unless the user asks for it to be included. Stage the named paths only, never `git add -A` or `git add .`.
+- **The message**: follow the repository's conventions (recent `git log`, and any rules in CLAUDE.md or contributing docs, such as required trailers or committing on a branch). The summary line says what the change does.
+- **On yes**:
+    - Note the current `HEAD` first: if the session made no earlier commits, it is the `base`.
+    - Stage the paths and commit. Don't push. Never skip hooks (`--no-verify`).
+    - If the commit fails, for example because a hook rejects it, report the error in a line or two and ask whether to fix it or to write the walkthrough uncommitted.
+    - After the commit, the walkthrough is `dirty: false` and its `tip` is the new commit, which is listed in `commits`. Run the checker in step 7 with `--ref HEAD`, and take a fresh snapshot for the reply's snapshot line.
+- **On no**: write it with `dirty: true` and the drift note, and don't suggest committing again in the reply.
 
 ## 5. Choose the file
 
@@ -86,7 +107,7 @@ Never present a walkthrough with unchecked references, snippets or answers.
    ```
    python <explain>/scripts/check_refs.py --repo . --file <the walkthrough>
    ```
-   Add `--ref <tip>` in history mode (`HEAD` for `since=`). Fix every `ERROR` and every `warning`, and re-run until it passes. If Python isn't available, check by hand and say so in the reply.
+   Add `--ref <tip>` in history mode (`HEAD` for `since=`), and `--ref HEAD` if step 4 committed the changes. Fix every `ERROR` and every `warning`, and re-run until it passes. If Python isn't available, check by hand and say so in the reply.
 
    In a `.qmd`, the checker also checks code annotations: every marker has its list item, nothing comes between a block and its list, and no item has a second paragraph. Quarto gets these wrong silently.
 
@@ -104,8 +125,8 @@ The checker confirms only that quoted code and references exist and match. It ca
 Keep it short:
 - the path of the walkthrough, and of the HTML if rendered (or why it wasn't);
 - its depth and level, and two or three sentences on what it covers;
-- the drift note, if `dirty: true`;
+- the commit made in step 4 (short SHA and summary line), if any, or the drift note, if `dirty: true`;
 - the checker result, in one line;
 - in session mode, end with the line `Kompreni snapshot: tree=<sha> head=<sha>` (the snapshot you took), so that a later explanation or walkthrough covers only what changed after this one.
 
-Don't paste the document into the chat. Don't commit it; the user decides that.
+Don't paste the document into the chat. Don't commit the walkthrough itself; the user decides that.

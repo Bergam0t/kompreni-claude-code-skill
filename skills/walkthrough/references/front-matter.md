@@ -46,7 +46,7 @@ The same, without the `format:` key.
 | `kompreni.kind` | yes | `walkthrough` |
 | `kompreni.summary` | yes | One sentence: what changed and why, in behaviour terms. Written for someone scanning a list of walkthroughs |
 | `kompreni.source` | yes | `session`, `branch`, `commit` or `since` |
-| `kompreni.base` | yes | Full SHA the changes are measured from: the merge-base, `<commit>^`, the `since` ref resolved, or in session mode the commit before the session's first commit (or `HEAD` if it made none) |
+| `kompreni.base` | yes | Full SHA the changes are measured from: the merge-base, `<commit>^`, the `since` ref resolved, or in session mode the commit before the session's first commit (or, if it made none, `HEAD` as it was before any commit made in step 4 of SKILL.md) |
 | `kompreni.tip` | yes | Full SHA of the end of the range. In session mode, `HEAD` at the time of writing |
 | `kompreni.dirty` | yes | `true` if the walkthrough covers uncommitted changes, so references point at the working tree. Otherwise `false` |
 | `kompreni.branch` | if any | The branch name in `branch=` mode, or the current branch in session mode |
