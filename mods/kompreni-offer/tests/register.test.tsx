@@ -2,7 +2,7 @@ import { expect, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
-import { buildPrompt, optionsFor, parseArgs } from '../hooks/register'
+import { buildPrompt, buildWalkthroughPrompt, optionsFor, parseArgs } from '../hooks/register'
 
 const turn = (agentId?: string) => ({
   reason: 'answer' as const,
@@ -352,4 +352,105 @@ test('off hides the row whichever show setting is chosen', async ($, on) => {
   const { rowText, store } = setUp($, on)
   store.set('enabled', 'off')
   expect(await rowText()).toBeUndefined()
+})
+
+// Walkthrough and Code tour buttons.
+
+test('builds the walkthrough prompt: standard and deep only, no scope, code=all for a tour', async () => {
+  expect(buildWalkthroughPrompt('kompreni:walkthrough', 'auto', 'auto')).toBe('/kompreni:walkthrough')
+  expect(buildWalkthroughPrompt('kompreni:walkthrough', 'brief', 'auto')).toBe('/kompreni:walkthrough')
+  expect(buildWalkthroughPrompt('kompreni:walkthrough', 'deep', 'new-to-language')).toBe(
+    '/kompreni:walkthrough depth=deep level=new-to-language',
+  )
+  expect(buildWalkthroughPrompt('kompreni-walkthrough', 'standard', 'knows R, new to Python', 'all')).toBe(
+    '/kompreni-walkthrough code=all depth=standard level="knows R, new to Python"',
+  )
+})
+
+// Stubs for the button tests: the installed commands, an empty or drafted prompt box, and what was filled.
+const withCommands = (on: On, names: string[], draft = '') => {
+  const filled: string[] = []
+  on('command.list', () => ({ value: names.map(command) }))
+  on('prompt.read', () => ({ value: { text: draft, cursor: 0 } }))
+  on('prompt.fill', (_, e) => {
+    filled.push(e.text)
+    return { isFilled: true, text: e.text, cursor: e.text.length }
+  })
+  return filled
+}
+
+test('Walkthrough and Code tour fill the walkthrough command with the chosen settings', async ($, on) => {
+  const { editTurn, store } = setUp($, on)
+  const filled = withCommands(on, ['kompreni:explain', 'kompreni:walkthrough'])
+  store.set('depth', 'deep')
+  store.set('level', 'new-to-language')
+  await editTurn('/repo/a.py')
+  await $.prompt.submit({ ...typed('/kompreni:explain'), command: { name: 'kompreni:explain', args: '' } })
+  await $.turn.complete(turn())
+  await editTurn('/repo/b.py')
+
+  const ui = await $.ui.mount({ ...BAND, surface: 'vscode' })
+  await ui.select({ key: 'scope', value: 'all' })
+  await ui.press({ key: 'walkthrough' })
+  await ui.unmount()
+  await $.turn.complete(turn()) // filling hid the row until the next turn
+  const again = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  await again.press({ key: 'code-tour' })
+  await again.unmount()
+  expect(filled).toEqual([
+    '/kompreni:walkthrough depth=deep level=new-to-language',
+    '/kompreni:walkthrough code=all depth=deep level=new-to-language',
+  ])
+})
+
+test('no walkthrough buttons without the walkthrough skill', async ($, on) => {
+  const { rowText } = setUp($, on)
+  withCommands(on, ['kompreni:explain'])
+  expect(await rowText()).toBe('Kompreni: no file edits seen in this conversation.')
+  const without = await $.ui.mount({ ...BAND, surface: 'vscode' })
+  expect(await without.find({ key: 'explain' })).toBeDefined()
+  expect(await without.find({ key: 'walkthrough' })).toBeUndefined()
+  expect(await without.find({ key: 'code-tour' })).toBeUndefined()
+  await without.unmount()
+})
+
+test('the walkthrough buttons show on the one-line row when the skill is installed', async ($, on) => {
+  setUp($, on)
+  withCommands(on, ['kompreni:explain', 'kompreni-walkthrough'])
+  const ui = await $.ui.mount({ ...BAND, surface: 'vscode' })
+  expect(await ui.find({ key: 'walkthrough' })).toBeDefined()
+  expect(await ui.find({ key: 'code-tour' })).toBeDefined()
+  await ui.unmount()
+})
+
+test('Walkthrough never overwrites a draft', async ($, on) => {
+  const { editTurn } = setUp($, on)
+  const filled = withCommands(on, ['kompreni:walkthrough'], 'half-typed')
+  await editTurn('/repo/a.py')
+  const ui = await $.ui.mount({ ...BAND, surface: 'vscode' })
+  await ui.press({ key: 'walkthrough' })
+  expect(filled).toEqual([])
+  expect(await ui.find({ key: 'walkthrough' })).toBeDefined()
+  await ui.unmount()
+})
+
+test('a session-mode walkthrough resets the count, typed or invoked; a history-mode one does not', async ($, on) => {
+  const { editTurn, rowText } = setUp($, on)
+  await editTurn('/repo/a.py')
+  await $.prompt.submit({ ...typed('/kompreni:walkthrough'), command: { name: 'kompreni:walkthrough', args: '' } })
+  await $.turn.complete(turn())
+  await editTurn('/repo/b.py')
+  expect(await rowText()).toBe('Kompreni: 1 file changed since the last explanation.')
+
+  await $.prompt.submit(typed('write that up'))
+  await $.tool.call({ tool: 'Skill', skill: 'kompreni:walkthrough', args: 'code=all' })
+  await $.turn.complete(turn())
+  await editTurn('/repo/c.py')
+  expect(await rowText()).toBe('Kompreni: 1 file changed since the last explanation.')
+
+  await $.prompt.submit(typed('document that commit'))
+  await $.tool.call({ tool: 'Skill', skill: 'kompreni:walkthrough', args: 'commit=abc123' })
+  await $.turn.complete(turn())
+  await editTurn('/repo/d.py')
+  expect(await rowText()).toBe('Kompreni: 2 files changed since the last explanation.')
 })

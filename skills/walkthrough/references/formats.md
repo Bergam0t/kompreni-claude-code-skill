@@ -1,6 +1,6 @@
 # Formats
 
-Two output formats share one structure. `qmd` is richer (tabsets, code annotations, collapsible callouts, numbered figures) and renders to a single HTML file. `md` is GitHub-flavoured Markdown that reads well on GitHub and in editors. The `qmd` syntax below was rendered with Quarto 1.11 with no warnings.
+Two output formats share one structure. `qmd` is richer (tabsets, code annotations, collapsible callouts, numbered figures) and renders to a single HTML file. `md` is GitHub-flavoured Markdown that reads well on GitHub and in editors. The `qmd` syntax below was rendered with Quarto 1.11 with no warnings. A code tour (`code=all`, see `code-tour.md`) is `qmd` only, because it depends on code annotations.
 
 ## Code blocks
 
@@ -69,7 +69,16 @@ Text: "This walkthrough was written on <date> before the changes were committed.
 
 ## Code annotations (`qmd` only)
 
-Append a marker as a comment, in the block's language, at the end of a line, and follow the block immediately with a numbered list. The front matter sets `code-annotations: hover`. Markers are allowed on verbatim blocks: the checker ignores them.
+Append a marker as a comment, in the block's language, at the end of a line, and follow the block immediately with a numbered list. The front matter sets `code-annotations: hover` (a code tour uses `below`, see `code-tour.md`). Markers are allowed on verbatim blocks: the checker ignores them when comparing.
+
+Tested with Quarto 1.11:
+- Lines that share an explanation repeat the same marker.
+- Blank lines between the block and its list are fine, but any prose between them silently unlinks the annotations.
+- Each item must be a single paragraph: a second paragraph is silently dropped.
+- An item must not start with a list, heading or quote marker (`- `, `a. `, `#`, `>`); that makes the whole render fail.
+- Annotations work inside tabsets and collapsed callouts.
+
+The checker reports each of these mistakes as an error.
 
 ````markdown
 ```{.python filename="src/api.py:40-42"}
@@ -80,7 +89,7 @@ def fetch(url, retries=3):        # <1>
 2. Each attempt...
 ````
 
-Comment syntax: `#` (Python, R, shell, YAML), `//` (JS, TS, C-family, Rust, Go), `--` (SQL, Lua, Haskell), `;` (Lisp, assembly). In `md`, follow the block with a short numbered list that refers to the lines by content instead.
+Comment syntax: `#` (Python, R, shell, YAML), `//` (JS, TS, C-family, Rust, Go), `--` (SQL, Lua, Haskell), `;` (Lisp, assembly), `<!-- <n> -->` (Markdown, HTML), `/* <n> */` (CSS). In `md`, follow the block with a short numbered list that refers to the lines by content instead.
 
 ## Diagrams
 

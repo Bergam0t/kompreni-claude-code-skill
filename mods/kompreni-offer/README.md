@@ -7,7 +7,7 @@ Kompreni: 3 files changed since the last explanation.
 Scope  [since last explanation                        ▾]
 Depth  [auto (picked from the size of the change)     ▾]
 Level  [new-to-language                               ▾]
-[Explain] [Dismiss]
+[Explain] [Walkthrough] [Code tour] [Dismiss]
 ```
 
 (The Scope line appears only after the first explanation.)
@@ -15,7 +15,7 @@ Level  [new-to-language                               ▾]
 When there's nothing new to explain, it shrinks to one line, and Explain uses your remembered depth and level:
 
 ```
-Kompreni: no file edits seen since the last explanation.  [Explain] [Dismiss] [Whole conversation]
+Kompreni: no file edits seen since the last explanation.  [Explain] [Walkthrough] [Code tour] [Dismiss] [Whole conversation]
 ```
 
 (**Whole conversation** appears only after an explanation, and opens the full row with that scope chosen.)
@@ -25,11 +25,13 @@ Kompreni: no file edits seen since the last explanation.  [Explain] [Dismiss] [W
 - `always`, the default: whenever Claude isn't working, even before any edits, when it is the one-line form. This is still useful because edits made through shell commands aren't counted, but the skill finds them in git. **Dismiss** hides the row until the next turn finishes.
 - `changes`: only after a turn in which Claude edited files. **Dismiss** hides the row until the next turn that edits something.
 
-The count matches what the skill will explain: files edited since the last Kompreni explanation in this session, across however many turns. It resets when an explanation actually runs, whether you used the button, typed the command, or asked Claude in words. History-mode runs (`branch=`, `since=`, `commit=`) don't reset it. Dismissing the row doesn't reset the count either.
+The count matches what the skill will explain: files edited since the last Kompreni explanation in this session, across however many turns. It resets when an explanation or a walkthrough actually runs, whether you used a button, typed the command, or asked Claude in words. History-mode runs (`branch=`, `since=`, `commit=`) don't reset it. Dismissing the row doesn't reset the count either.
 
 After the first explanation, a **Scope** picker appears: *since last explanation* (the default) or *whole conversation*, which fills in `scope=all` and counts every file changed in the session. The choice lasts for the session only.
 
 **Explain** fills your prompt box with the command, e.g. `/kompreni:explain depth=deep level=new-to-language`. You press Enter. It never submits for you, and it never overwrites a draft you've started.
+
+**Walkthrough** and **Code tour** do the same for `/kompreni:walkthrough`, which writes a persistent Quarto or Markdown document instead of answering in the chat. **Code tour** adds `code=all`: every changed line, explained with Quarto code annotations. Both use your level, and your depth only if it's `standard` or `deep` (otherwise the skill sizes the walkthrough itself). They never pass a scope: a walkthrough covers the whole conversation. The two buttons appear only if the walkthrough skill is installed.
 
 The depth and level you pick are remembered across sessions. Each picker's **auto** option says what it does: depth is picked from the size of the change, and level is intermediate unless this conversation, your `CLAUDE.md` or Claude's memory says something about your experience (e.g. "I'm new to Python"). The explanation's first line says which level it used and where that came from.
 
@@ -37,6 +39,7 @@ The depth and level you pick are remembered across sessions. Each picker's **aut
 
 - Claude Code with mod support (built and tested against 2.1.331).
 - The Kompreni explain skill, as the `kompreni` plugin (`/kompreni:explain`) or as a plain skill named `kompreni-explain`. The mod finds whichever is installed.
+- For the Walkthrough and Code tour buttons, the walkthrough skill (`/kompreni:walkthrough` or `kompreni-walkthrough`), from the same plugin.
 
 ## Load it
 

@@ -1,7 +1,7 @@
 ---
 name: walkthrough
 description: Write a structured, persistent walkthrough document (Quarto .qmd, or Markdown) that teaches how and why code changed, for substantial changes worth keeping a record of. Works on the changes an AI agent made in this session, or on a git branch, a commit, or the commits since a ref. Use when the user asks for a walkthrough, write-up or document of changes ("write a walkthrough of this", "document what changed on this branch as a qmd"). For a quick explanation in the chat, use kompreni:explain instead. Never run it automatically after a task.
-argument-hint: "[depth=standard|deep] [level=new-to-programming|new-to-language|intermediate|advanced|<free text>] [branch=<name> [onto=<ref>] | since=<ref> | commit=<ref>] [focus=<path or topic>] [scope=all|new] [format=qmd|md] [out=<dir>] [render=auto|yes|no] [quiz=on|off] [title=\"...\"]"
+argument-hint: "[depth=standard|deep] [level=new-to-programming|new-to-language|intermediate|advanced|<free text>] [branch=<name> [onto=<ref>] | since=<ref> | commit=<ref>] [focus=<path or topic>] [scope=all|new] [code=key|all] [format=qmd|md] [out=<dir>] [render=auto|yes|no] [quiz=on|off] [title=\"...\"]"
 ---
 
 # Kompreni: write a walkthrough of the changes
@@ -21,11 +21,14 @@ This skill shares its change collection, grouping, evidence rules, levels and ch
 | `branch`, `onto`, `since`, `commit` | none | History mode, as in explain. At most one of `branch`, `since` and `commit` |
 | `focus` | none | A path or topic. Cover only the changes relevant to it |
 | `scope` | `all` | Session mode only. `all`: everything this conversation changed. `new`: only what changed since the last Kompreni explanation or walkthrough in this conversation |
+| `code` | `key` | `key`: one to three key excerpts, as in `references/structure.md`. `all`: a **code tour** showing all the substantive changed code with a little context, explained line by line with Quarto code annotations. See `references/code-tour.md`. Implies `format=qmd` |
 | `format` | auto | `qmd` or `md`. Auto: `qmd` if `quarto --version` works or a `_quarto.yml` exists in the repo root or a parent folder, otherwise `md` |
 | `out` | `kompreni/walkthroughs` | The folder to write into, relative to the repo root |
 | `render` | `auto` | `qmd` only. `auto`: render to HTML if Quarto is installed and the file isn't inside an existing Quarto project. `yes`: render anyway. `no`: don't render |
 | `quiz` | `on` | `off` leaves out "Check your understanding" |
 | `title` | from the changes | The document's title |
+
+**`code=all` with `format=md`** conflict: GitHub-flavoured Markdown has no code annotations. Say so and ask which the user wants. With `code=all` and no Quarto installed, still write `.qmd` (it's readable as text) and skip rendering.
 
 ## 2. Collect the changes
 
@@ -64,6 +67,7 @@ Read these before writing:
 - `references/structure.md`: the sections, the teaching devices, the length bands and the questions.
 - `references/formats.md`: the exact syntax for `qmd` and `md`, code snippets and references.
 - `references/front-matter.md`: the metadata block at the top.
+- `references/code-tour.md`, **only with `code=all`**: it replaces "What changed" and "How it works now" with an annotated code tour, and changes the front matter.
 - `<explain>/references/levels.md`: how much language background to give.
 - `<explain>/references/output-guide.md`, "Evidence labels" and "Code snippets and references".
 
@@ -83,6 +87,10 @@ Never present a walkthrough with unchecked references, snippets or answers.
    python <explain>/scripts/check_refs.py --repo . --file <the walkthrough>
    ```
    Add `--ref <tip>` in history mode (`HEAD` for `since=`). Fix every `ERROR` and every `warning`, and re-run until it passes. If Python isn't available, check by hand and say so in the reply.
+
+   In a `.qmd`, the checker also checks code annotations: every marker has its list item, nothing comes between a block and its list, and no item has a second paragraph. Quarto gets these wrong silently.
+
+   With `code=all`, also pass `--coverage <base>..<tip>`. In history mode, `<tip>` is the tip ref. In session mode, use the snapshot's tree as `<tip>`, so untracked files count. Then deal with every `note:` as `references/code-tour.md` says ("Checking coverage").
 3. Re-check every answer in "Check your understanding" against the code it relies on. If the code doesn't determine an answer, drop the question.
 4. **Render** (`qmd` only, unless `render=no`):
    - If a `_quarto.yml` exists in the walkthrough's folder or any parent, the file belongs to that Quarto project, and rendering sends the HTML to the project's output folder. With `render=auto`, don't render; say why in the reply. With `render=yes`, render and report where the HTML went.

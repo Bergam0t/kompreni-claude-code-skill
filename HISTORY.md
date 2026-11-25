@@ -39,3 +39,17 @@
     - YAML front matter (`kompreni:` with range, commits, files, level, tests) as the starting point for searchable change history
     - Deep explanations now end by offering the matching walkthrough command
 - `check_refs.py` understands Quarto code blocks (`filename="path:lines"` captions, `.illustrative`, `{mermaid}`, annotation markers), errors on executable `{python}` cells, skips YAML front matter, and checks GitHub permalinks at their commit
+- Add code tours: `/kompreni:walkthrough code=all`
+    - Shows all the substantive changed code with a little context, in call-flow order, explained line by line with Quarto code annotations (`code-annotations: below`, so clicking an explanation highlights its lines)
+    - Real line numbers in the margin (`.numberLines startFrom=`), before/after tabs where removed code matters, test changes annotated inside collapsed callouts, housekeeping summarised
+    - `.qmd` only; `code=all` with `format=md` asks which to use
+    - The default, `code=key`, keeps the one-to-three key excerpts
+- `check_refs.py` checks Quarto code annotations and coverage
+    - Errors when a marker has no list item or an item has no marker, when prose comes between a block and its list, when an item has a second paragraph, and when an item starts like a list or heading. Quarto silently drops the first three and fails to render the last
+    - Errors when `.numberLines` has no `startFrom` matching the caption's first line
+    - Recognises `<!-- <n> -->` (Markdown, HTML) and `/* <n> */` (CSS) markers as well as line comments
+    - New `--coverage BASE[..TIP]` lists changed lines that no verbatim snippet shows, as notes, ignoring blank lines
+- The `kompreni-offer` mod gains **Walkthrough** and **Code tour** buttons (mod version 0.1.3)
+    - They fill in `/kompreni:walkthrough` (with `code=all` for Code tour), with the chosen level, and the depth only if it's `standard` or `deep`; never a scope
+    - Shown only when the walkthrough skill is installed, on both the full and the one-line row; never overwrite a draft
+    - A session-mode walkthrough, typed or invoked by Claude, now resets the count like an explanation does

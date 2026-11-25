@@ -162,6 +162,101 @@ class CheckRefsTest(unittest.TestCase):
         bad = "See [f](https://github.com/o/r/blob/main/src/a.py#L9-L10).\n"
         self.assertEqual(self.run_check(bad)[0], 1)
 
+    # Code annotations (.qmd).
+
+    ANNOTATED = '```{.python filename="src/a.py:1-2"}\ndef f(x):          # <1>\n    return x + 2    # <2>\n```\n'
+
+    def test_annotations_missing_and_extra_items(self):
+        code, out = self.run_qmd(self.ANNOTATED + "1. Entry.\n")
+        self.assertEqual(code, 1)
+        self.assertIn("marker(s) 2 have no list item", out)
+        code, out = self.run_qmd(self.ANNOTATED + "1. Entry.\n2. Change.\n3. Extra.\n")
+        self.assertEqual(code, 1)
+        self.assertIn("list item(s) 3 have no marker", out)
+
+    def test_annotations_blank_line_ok_prose_between_fails(self):
+        code, out = self.run_qmd(self.ANNOTATED + "\n1. Entry.\n2. Change.\n\nAfter the list.\n")
+        self.assertEqual(code, 0, out)
+        code, out = self.run_qmd(self.ANNOTATED + "Some prose.\n\n1. Entry.\n2. Change.\n")
+        self.assertEqual(code, 1)
+        self.assertIn("not followed by its numbered list", out)
+
+    def test_annotation_second_paragraph_fails(self):
+        code, out = self.run_qmd(self.ANNOTATED + "1. Entry.\n\n    More about the entry.\n2. Change.\n")
+        self.assertEqual(code, 1)
+        self.assertIn("item 1 has a second paragraph", out)
+
+    def test_annotation_number_shared_by_lines(self):
+        draft = '```{.python filename="src/a.py:1-2"}\ndef f(x):          # <1>\n    return x + 2    # <1>\n```\n1. Both.\n'
+        code, out = self.run_qmd(draft)
+        self.assertEqual(code, 0, out)
+
+    def test_annotation_item_starting_like_a_list_fails(self):
+        code, out = self.run_qmd(self.ANNOTATED + "1. - a bullet.\n2. Change.\n")
+        self.assertEqual(code, 1)
+        self.assertIn("starts like a list", out)
+
+    def test_html_comment_markers_in_markdown_blocks(self):
+        (self.repo / "notes.md").write_text("Step one.\nStep two.\n", newline="\n")
+        try:
+            draft = ('```{.markdown filename="notes.md:1-2"}\nStep one. <!-- <1> -->\nStep two.\n```\n1. First step.\n')
+            code, out = self.run_qmd(draft)
+            self.assertEqual(code, 0, out)
+            code, out = self.run_qmd(draft.replace("1. First step.\n", ""))
+            self.assertEqual(code, 1)
+            self.assertIn("not followed by its numbered list", out)
+        finally:
+            (self.repo / "notes.md").unlink()
+
+    def test_annotation_markers_outside_quarto_warn(self):
+        code, out = self.run_check("```python src/a.py:1-2\ndef f(x):  # <1>\n    return x + 2\n```\n1. Entry.\n")
+        self.assertEqual(code, 0, out)
+        self.assertIn("only work in Quarto", out)
+
+    def test_number_lines_start_from(self):
+        ok = '```{.python .numberLines startFrom="2" filename="src/a.py:2"}\n    return x + 2\n```\n'
+        self.assertEqual(self.run_qmd(ok)[0], 0)
+        bad = '```{.python .numberLines filename="src/a.py:2"}\n    return x + 2\n```\n'
+        code, out = self.run_qmd(bad)
+        self.assertEqual(code, 1)
+        self.assertIn('startFrom="2"', out)
+
+    # --coverage
+
+    def test_coverage_reports_unshown_changes(self):
+        draft = "```python src/a.py:1-2\ndef f(x):\n    return x + 3\n```\n"
+        code, out = self.run_check(draft, "--ref", "feature", "--coverage", "main..feature")
+        self.assertEqual(code, 0, out)  # notes never fail the check
+        self.assertIn("note: not shown: src/a.py:", out)
+        self.assertNotIn("not shown: src/a.py:2\n", out)
+        full = "```python src/a.py:1-10\n" + BRANCH + "```\n"
+        code, out = self.run_check(full, "--ref", "feature", "--coverage", "main..feature")
+        self.assertEqual(code, 0, out)
+        self.assertIn("0 changed range(s) not shown", out)
+
+    def test_coverage_ignores_blank_lines(self):
+        # Lines 7-8 of the branch's addition are blank; showing 9-10 leaves nothing to report there.
+        draft = ("```python src/a.py:1-2\ndef f(x):\n    return x + 3\n```\n\n"
+                 "```python src/a.py:9-10\ndef h():\n    pass\n```\n")
+        code, out = self.run_check(draft, "--ref", "feature", "--coverage", "main..feature")
+        self.assertEqual(code, 0, out)
+        self.assertIn("0 changed range(s) not shown", out)
+
+    def test_coverage_against_working_tree(self):
+        draft = "```python src/a.py:2\n    return x + 2\n```\n"
+        code, out = self.run_check(draft, "--coverage", "HEAD")
+        self.assertEqual(code, 0, out)
+        self.assertIn("0 changed range(s) not shown", out)
+
+    def test_coverage_deletions_need_a_before_snippet(self):
+        after = "```python src/a.py:1-2\ndef f(x):\n    return x + 1\n```\n"
+        code, out = self.run_check(after, "--ref", "main", "--coverage", "feature..main")
+        self.assertIn("removed lines not shown: src/a.py:", out)
+        before = after + "\n```python src/a.py:6-10@feature\n    return y * 2\n\n\ndef h():\n    pass\n```\n"
+        code, out = self.run_check(before, "--ref", "main", "--coverage", "feature..main")
+        self.assertEqual(code, 0, out)
+        self.assertIn("0 changed range(s) not shown", out)
+
     def test_other_urls_ignored(self):
         code, out = self.run_check("See [docs](https://example.com/guide#L3).\n")
         self.assertEqual(code, 0, out)

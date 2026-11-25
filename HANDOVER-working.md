@@ -27,7 +27,19 @@ Tracks [HANDOVER-original.md](HANDOVER-original.md): what has and hasn't been ac
     - The checker caught one wrong line range. A wrong path in prose with no line number was found only by re-reading
     - A GFM conversion of it also passes the checker; GitHub rendering itself is unchecked
     - Caveat: written by the same agent that wrote the skill, so it's not an independent test
-- [ ] Scenarios 22-27 not yet run, in particular by a fresh agent (`claude --plugin-dir .`) with no prior context
+- [x] Code tours: `code=all` (`references/code-tour.md`). All the substantive changed code, annotated line by line with Quarto code annotations (`below`), with real line numbers via `.numberLines startFrom=`
+    - Quarto 1.11 findings, by rendering (not in Quarto's docs):
+        - a second paragraph in an annotation item is silently dropped;
+        - prose between a block and its list silently unlinks the annotations;
+        - an item starting like a list (`- `, `a. `, a bare `A.`) crashes the whole render;
+        - `<!-- <n> -->` works in Markdown blocks, `/* <n> */` in CSS;
+        - `startFrom` works alongside `filename`, and the highlights use the real line numbers.
+    - `check_refs.py`: annotation integrity, `startFrom`, and `--coverage BASE[..TIP]`
+    - Dogfood: `kompreni/walkthroughs/2026-11-25-explain-only-new-changes-code-tour.qmd`. 36 annotated blocks; every annotation's highlighted lines were verified against the HTML
+- [x] §9 Phase 4 "allow the user to request a Quarto walkthrough": Walkthrough and Code tour buttons in `kompreni-offer` (mod 0.1.3). A session-mode walkthrough resets the count. Tests pass (`claude plugin test`); **not tried live**, and not type-checked (no `tsc` here, and the API types are only written when Claude Code loads the mod)
+- [ ] Scenarios 22-30 not yet run, in particular by a fresh agent (`claude --plugin-dir .`) with no prior context
+- [ ] Code tours of large changes (the 600-line rule) not yet tried
+- [ ] A code tour's teaching value not yet judged by anyone but its author
 - [ ] GFM output not yet viewed on GitHub (alerts, mermaid, `<details>`)
 - [ ] Quarto quirk to remember: inside an existing Quarto project, `quarto render <file>` writes into the project's output dir, and website projects pick up `kompreni/walkthroughs/` on their next full render. `render=auto` skips rendering there and says so
 
@@ -44,7 +56,6 @@ Tracks [HANDOVER-original.md](HANDOVER-original.md): what has and hasn't been ac
 ## Deferred
 
 - [ ] §4 Layer 3 persistent knowledge, §9 Phases 3 and 5. The walkthrough front matter is the starting point. Next: an index or listing across `kompreni/walkthroughs/`, and how agents find relevant walkthroughs before changing code
-- [ ] Walkthroughs: a "Walkthrough" button in `kompreni-offer`, and adding `kompreni:walkthrough` to its `KNOWN_COMMANDS` so that a walkthrough resets the count. Wait until the mod has been tried live
 - [ ] Walkthroughs: re-pin a `dirty: true` walkthrough to a SHA after commit; interactive exercises beyond collapsed Q&A
 - [x] §5 / §9 Phase 4 first mod: `mods/kompreni-offer` (an Explain row above the prompt, shown always by default or only after turns with edits via `show=changes`; fills the command). Validated, type-checked and unit-tested; **not yet tried in a live session or in VS Code**
 - [ ] Mods: richer UI (a pane listing changed files, per-file explain), capture of Bash-made changes (e.g. a git snapshot per turn), access to earlier explanations

@@ -69,6 +69,7 @@ For a substantial change, `/kompreni:walkthrough` writes a guided walkthrough to
 /kompreni:walkthrough
 /kompreni:walkthrough branch=feature-x level=new-to-language
 /kompreni:walkthrough commit=abc1234 format=md
+/kompreni:walkthrough code=all            # a code tour: every changed line, annotated
 ```
 
 - **Where**: `kompreni/walkthroughs/<date>-<slug>.qmd`, meant to be committed. Change the folder with `out=`.
@@ -79,6 +80,7 @@ For a substantial change, `/kompreni:walkthrough` writes a guided walkthrough to
     - annotated excerpts and before/after tabs;
     - a diagram, only if the flow changed;
     - the decisions with their evidence, honest verification, limitations, and a few questions with hidden answers (`quiz=off` to leave them out).
+- **Code tour** (`code=all`): instead of a few key excerpts, it shows all the substantive changed code, with a little context, in order of the call flow. It uses Quarto code annotations: numbered markers on the lines, with explanations below each block that highlight their lines when clicked. Line numbers match the real files. Test changes are annotated inside collapsed sections, and housekeeping is summarised. A `--coverage` check confirms that every changed line is either shown or listed as not toured. Quarto only.
 - **Proportionate**: for a small change it suggests `/kompreni:explain` instead, and asks before writing.
 - **Uncommitted changes** are fine. The walkthrough notes that line references point at the working tree as it was, and may drift. Committing first gives stable references and, on GitHub, permalinks.
 - **Front matter** records the range, commits, files, level and tests (`kompreni:` in the YAML). This is the start of Kompreni's searchable change history.
@@ -87,7 +89,7 @@ The skill shares `level=`, `focus=` and history mode with `/kompreni:explain`. I
 
 ### Optional: an Explain row above the prompt
 
-The [`kompreni-offer`](mods/kompreni-offer/) mod shows a row above the prompt whenever Claude isn't working (or, with `/kompreni-offer show=changes`, only after turns that edited files). It counts the files changed since the last explanation, and has depth and level pickers and an **Explain** button that fills in the command for you. It remembers your choices. The skill works fine without it.
+The [`kompreni-offer`](mods/kompreni-offer/) mod shows a row above the prompt whenever Claude isn't working (or, with `/kompreni-offer show=changes`, only after turns that edited files). It counts the files changed since the last explanation, and has depth and level pickers and **Explain**, **Walkthrough** and **Code tour** buttons that fill in the command for you. It remembers your choices. The skill works fine without it.
 
 ## How it works
 

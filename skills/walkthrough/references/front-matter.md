@@ -25,6 +25,7 @@ kompreni:
   files: [src/upload.py, src/config.py, tests/test_upload.py]
   level: intermediate
   depth: deep
+  code: key
   tests: "pytest tests/test_upload.py: 14 passed"
   snapshot: {tree: 8c1e..., head: 51d0a3b7c9de...}
 ---
@@ -54,6 +55,7 @@ The same, without the `format:` key.
 | `kompreni.files` | yes | Repo-relative paths of the files whose changes are explained, in a flow list. Leave out lockfiles and generated files |
 | `kompreni.level` | yes | The level used: a preset name, or the free text |
 | `kompreni.depth` | yes | `standard` or `deep` |
+| `kompreni.code` | yes | `key` (key excerpts) or `all` (a code tour; see `code-tour.md`, which also switches `code-annotations` to `below`) |
 | `kompreni.tests` | yes | What was run and the result, in one line, or `"none run"`. In history mode, the CI summary or `"no results available"` |
 | `kompreni.snapshot` | session mode | `{tree: <sha>, head: <sha>}` from `snapshot.py` |
 | `kompreni.focus` | if given | The `focus=` value |

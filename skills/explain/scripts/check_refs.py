@@ -23,6 +23,14 @@ Reads the draft from stdin (or --file) and checks it against the repository:
   (``https://github.com/o/r/blob/<ref>/path#L42``) are checked at ``<ref>``;
   other URLs are ignored.
 * A YAML front matter block at the top of the draft is skipped.
+* Quarto code annotations (.qmd only): every ``# <n>`` marker in a block needs
+  item ``n`` in the numbered list straight after it, every item needs a
+  marker, and an item can't have a second paragraph (Quarto drops it). These
+  are errors, because Quarto mostly fails silently. Outside .qmd, markers
+  are a warning. ``.numberLines`` needs ``startFrom`` equal to the first line.
+* ``--coverage BASE[..TIP]`` lists the changed lines that no verbatim snippet
+  shows (new-side lines against snippets at the tip; deletion-only hunks
+  against ``@<ref>`` snippets), as notes that don't change the exit status.
 
 Exit status: 0 = no errors (warnings allowed), 1 = errors, 2 = bad usage.
 Standard library only; needs git on PATH only for ``@<ref>``, ``--ref`` and
@@ -41,7 +49,14 @@ PLAIN = re.compile(r"(?<![\w/\.@(#-])(?P<path>[\w./\-]+\.[A-Za-z]\w{0,7}):(?P<a>
 MDLINK = re.compile(r"\[[^\]]*\]\([^)]*\)")
 FENCE = re.compile(r"^(\s*)(`{3,}|~{3,})(.*)$")
 ATTR = re.compile(r'([\w-]+)\s*=\s*(?:"([^"]*)"|([^\s"}]+))')
-ANNOTATION = re.compile(r"\s*(#|//|--|;)\s*<\d+>\s*$")
+# Quarto annotation markers: a line comment (# // -- ;) or a block comment (<!-- --> or /* */) holding <n>.
+_MARK = r"(?:(?:#|//|--|;)\s*<(\d+)>|<!--\s*<(\d+)>\s*-->|/\*\s*<(\d+)>\s*\*/)\s*$"
+ANNOTATION = re.compile(r"\s*" + _MARK)
+MARKER = re.compile(_MARK)
+LIST_ITEM = re.compile(r"^(\d+)\.\s+(.*)$")
+# Item text that Pandoc reads as a nested block (list, heading, quote): Quarto's annotation filter crashes on it.
+BLOCK_START = re.compile(r"^([-*+](\s|$)|\d+[.)](\s|$)|[A-Za-z][.)](\s|$)|#{1,6}\s|>)")
+HUNK = re.compile(r"^@@ -(?P<oa>\d+)(?:,(?P<ob>\d+))? \+(?P<na>\d+)(?:,(?P<nb>\d+))? @@")
 SKETCH_LANGS = ("text", "ascii", "diff-illustrative")
 
 
@@ -120,6 +135,116 @@ def classify(info):
     return ("verbatim", loc) if loc else ("unmarked", None)
 
 
+def braced_attrs(info):
+    """key=value attributes of a braced (Quarto) info string; {} otherwise."""
+    if not info.startswith("{"):
+        return {}
+    return {m.group(1): m.group(2) if m.group(2) is not None else m.group(3) for m in ATTR.finditer(info)}
+
+
+def check_annotations(body, lines, after, where, is_qmd, errors, warnings):
+    """Quarto code annotations: every `# <n>` marker needs list item n, in an ordered list that
+    follows the block (blank lines allowed, nothing else). Quarto silently drops the links when
+    prose comes between, ignores markers with no item, and drops an item's second paragraph."""
+    markers = {int(next(g for g in m.groups() if g)) for line in body for m in [MARKER.search(line)] if m}
+    if not markers:
+        return
+    if not is_qmd:
+        warnings.append(f"{where}: annotation markers (`# <n>`) only work in Quarto; outside it they show as text")
+        return
+    j = after
+    while j < len(lines) and not lines[j].strip():
+        j += 1
+    if j >= len(lines) or not LIST_ITEM.match(lines[j]):
+        errors.append(f"{where}: annotated block is not followed by its numbered list "
+                      "(Quarto drops the annotations if anything but blank lines comes between)")
+        return
+    items, blank = [], False
+    while j < len(lines):
+        line = lines[j]
+        item = LIST_ITEM.match(line)
+        if item:
+            items.append(int(item.group(1)))
+            if BLOCK_START.match(item.group(2)):
+                errors.append(f"line {j + 1}: annotation item {item.group(1)} starts like a list, heading or quote "
+                              f"({item.group(2)[:12]!r}); Quarto's render fails on it. Start with a word")
+            blank = False
+        elif not line.strip():
+            blank = True
+        elif blank and line[:1] in (" ", "\t"):
+            errors.append(f"line {j + 1}: annotation item {items[-1]} has a second paragraph; "
+                          "Quarto drops it. Keep each item to one paragraph")
+            blank = False
+        elif blank:
+            break  # the list has ended
+        j += 1
+    missing = sorted(markers - set(items))
+    extra = sorted(set(items) - markers)
+    if missing:
+        errors.append(f"{where}: annotation marker(s) {', '.join(map(str, missing))} have no list item")
+    if extra:
+        errors.append(f"{where}: list item(s) {', '.join(map(str, extra))} have no marker in the block")
+
+
+def changed_ranges(repo, spec):
+    """Hunks of `git diff -U0 <base> [<tip>]` for spec 'base' or 'base..tip'.
+
+    Returns (added, removed): added maps path -> list of (a, b) new-side line ranges;
+    removed maps path -> list of (a, b, after) old-side ranges of deletion-only hunks.
+    """
+    base, _, tip = spec.partition("..")
+    cmd = ["git", "-C", str(repo), "diff", "-U0", "--no-color", "--no-ext-diff", base] + ([tip] if tip else []) + ["--"]
+    out = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", check=True).stdout
+    added, removed = {}, {}
+    old_path = new_path = None
+    for line in out.splitlines():
+        if line.startswith("--- "):
+            old_path = None if line[4:] == "/dev/null" else line[4:].removeprefix("a/")
+        elif line.startswith("+++ "):
+            new_path = None if line[4:] == "/dev/null" else line[4:].removeprefix("b/")
+        elif line.startswith("@@"):
+            h = HUNK.match(line)
+            if not h:
+                continue
+            oa, ob = int(h["oa"]), int(h["ob"] or 1)
+            na, nb = int(h["na"]), int(h["nb"] or 1)
+            if nb > 0 and new_path:
+                added.setdefault(new_path, []).append((na, na + nb - 1))
+            elif ob > 0 and (old_path or new_path):
+                removed.setdefault(old_path or new_path, []).append((oa, oa + ob - 1, na))
+    return added, removed
+
+
+def uncovered(a, b, shown):
+    """Sub-ranges of a..b not inside any of the shown (a, b) ranges."""
+    gaps, start = [], None
+    for n in range(a, b + 1):
+        hit = any(sa <= n <= sb for sa, sb in shown)
+        if not hit and start is None:
+            start = n
+        if hit and start is not None:
+            gaps.append((start, n - 1))
+            start = None
+    if start is not None:
+        gaps.append((start, b))
+    return gaps
+
+
+def runs(numbers):
+    """Consecutive runs in a sorted list of line numbers, as (a, b) pairs."""
+    out = []
+    for n in numbers:
+        if out and n == out[-1][1] + 1:
+            out[-1] = (out[-1][0], n)
+        else:
+            out.append((n, n))
+    return out
+
+
+def fmt_range(a, b):
+    return f"{a}" if a == b else f"{a}-{b}"
+
+
 def front_matter_end(lines):
     """Index of the first line after a leading YAML front matter block (0 if none)."""
     if not lines or lines[0].strip() != "---":
@@ -135,6 +260,9 @@ def main():
     ap.add_argument("--repo", default=".", help="repository root (default: current directory)")
     ap.add_argument("--file", help="read the draft from this file instead of stdin")
     ap.add_argument("--ref", help="git ref to read files from instead of the working tree")
+    ap.add_argument("--coverage", metavar="BASE[..TIP]",
+                    help="also list changed lines (git diff BASE TIP, or BASE against the working tree) "
+                         "that no verbatim snippet shows. Reported as notes, not errors")
     args = ap.parse_args()
     repo = Path(args.repo).resolve()
     if not repo.is_dir():
@@ -149,6 +277,7 @@ def main():
     errors, warnings = [], []
     prose = []
     checked_blocks = 0
+    shown_new, shown_old = {}, {}  # path -> [(a, b)] shown at the tip / at an explicit @ref
     lines = text.splitlines()
     i = front_matter_end(lines)
     while i < len(lines):
@@ -169,6 +298,8 @@ def main():
         i += 1
         where = f"line {start}"
         kind, loc = classify(info)
+        if kind != "mermaid":
+            check_annotations(body, lines, i, where, is_qmd, errors, warnings)
         if kind == "skip":
             continue
         if kind == "mermaid":
@@ -182,11 +313,16 @@ def main():
         if kind == "unmarked":
             warnings.append(f"{where}: code block has no location (add `path:LINE-LINE` or mark it `illustrative`)")
             continue
+        attrs = braced_attrs(info)
+        if ".numberLines" in info and attrs.get("startFrom", "1") != loc["a"]:
+            errors.append(f"{where}: .numberLines needs startFrom=\"{loc['a']}\" so the numbers match the file")
         ref = loc["ref"] or args.ref
         expected = check_range(repo, loc["path"], loc["a"], loc["b"], ref, where, errors)
         if expected is None:
             continue
         checked_blocks += 1
+        a, b = int(loc["a"]), int(loc["b"] or loc["a"])
+        (shown_old if loc["ref"] else shown_new).setdefault(loc["path"], []).append((a, b))
         if norm(body, strip_annotations=True) != norm(expected):
             errors.append(f"{where}: snippet does not match {loc['path']}:{loc['a']}-{loc['b'] or loc['a']}"
                           + (f"@{ref}" if ref else "")
@@ -213,12 +349,38 @@ def main():
             refs += 1
             check_range(repo, path, a, b, ref, f"line {n}", errors)
 
+    notes = []
+    if args.coverage:
+        try:
+            added, removed = changed_ranges(repo, args.coverage)
+        except (subprocess.CalledProcessError, FileNotFoundError) as exc:
+            print(f"error: --coverage: git diff failed: {getattr(exc, 'stderr', '') or exc}", file=sys.stderr)
+            return 2
+        tip = args.coverage.partition("..")[2] or args.ref
+        for path in sorted(added):
+            content = read_lines(repo, path, tip) or []
+            # Blank lines never need showing: drop them from each changed range before looking for gaps.
+            filled = lambda n: n > len(content) or content[n - 1].strip() != ""
+            for a, b in added[path]:
+                for ga, gb in uncovered(a, b, shown_new.get(path, [])):
+                    keep = [n for n in range(ga, gb + 1) if filled(n)]
+                    for run in runs(keep):
+                        notes.append(f"not shown: {path}:{fmt_range(*run)}")
+        for path in sorted(removed):
+            for a, b, after in removed[path]:
+                if uncovered(a, b, shown_old.get(path, [])):
+                    notes.append(f"removed lines not shown: {path}:{fmt_range(a, b)} (old numbering), "
+                                 f"after new line {after}")
+
     for w in warnings:
         print(f"warning: {w}")
     for e in errors:
         print(f"ERROR: {e}")
+    for n in notes:
+        print(f"note: {n}")
     print(f"checked {refs} reference(s) and {checked_blocks} verbatim snippet(s): "
-          f"{len(errors)} error(s), {len(warnings)} warning(s)")
+          f"{len(errors)} error(s), {len(warnings)} warning(s)"
+          + (f", {len(notes)} changed range(s) not shown" if args.coverage else ""))
     return 1 if errors else 0
 
 

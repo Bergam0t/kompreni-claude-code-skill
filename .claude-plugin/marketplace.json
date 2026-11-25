@@ -14,7 +14,7 @@
     {
       "name": "kompreni-offer",
       "source": "./mods/kompreni-offer",
-      "description": "Optional mod: after a turn that edits files, offers a Kompreni explanation with depth and level pickers."
+      "description": "Optional mod: a row above the prompt that offers a Kompreni explanation, walkthrough or code tour, with depth and level pickers."
     }
   ]
 }

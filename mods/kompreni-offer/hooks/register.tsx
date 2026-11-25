@@ -39,6 +39,10 @@ const SCOPES = [
 ]
 // The explain skill's names: as a plugin, then as a plain skill (e.g. a junction).
 const KNOWN_COMMANDS = ['kompreni:explain', 'kompreni-explain']
+// The walkthrough skill's names. Older kompreni installs don't have it: then no walkthrough buttons.
+const WALKTHROUGH_COMMANDS = ['kompreni:walkthrough', 'kompreni-walkthrough']
+// Walkthroughs take only these depths; brief and auto leave the size to the skill's own gate.
+const WALKTHROUGH_DEPTHS = ['standard', 'deep']
 
 const EDIT_TOOLS = new Set(['Edit', 'Write', 'NotebookEdit'])
 // History-mode runs explain a branch or commits, not this session's edits.
@@ -57,13 +61,39 @@ export const parseArgs = (args: string) => {
   return out
 }
 
+/** The level argument, quoted when it's free text with spaces; none for 'auto'. */
+const levelArg = (level: string) =>
+  level === 'auto' ? [] : [/\s/.test(level) ? `level="${level}"` : `level=${level}`]
+
 /** The prompt to fill: the command plus any non-default settings. */
 export const buildPrompt = (command: string, depth: string, level: string, scope = 'new') => {
   const parts = [`/${command}`]
   if (scope === 'all') parts.push('scope=all')
   if (depth !== 'auto') parts.push(`depth=${depth}`)
-  if (level !== 'auto') parts.push(/\s/.test(level) ? `level="${level}"` : `level=${level}`)
+  parts.push(...levelArg(level))
   return parts.join(' ')
+}
+
+/**
+ * The walkthrough prompt to fill. Never passes scope: a walkthrough covers the whole
+ * conversation by default, and scope=new straight after an explanation would cover nothing.
+ */
+export const buildWalkthroughPrompt = (command: string, depth: string, level: string, code: 'key' | 'all' = 'key') => {
+  const parts = [`/${command}`]
+  if (code === 'all') parts.push('code=all')
+  if (WALKTHROUGH_DEPTHS.includes(depth)) parts.push(`depth=${depth}`)
+  parts.push(...levelArg(level))
+  return parts.join(' ')
+}
+
+/** The walkthrough command to fill, if that skill is installed. */
+async function resolveWalkthrough($: EngineInterface): Promise<string | undefined> {
+  try {
+    const names = new Set((await $.command.list()).map(c => c.name))
+    return WALKTHROUGH_COMMANDS.find(name => names.has(name))
+  } catch {
+    return undefined // never break the row over a failed lookup: just no walkthrough buttons
+  }
 }
 
 /** The explain command to fill: the one set with command=, else the first installed. */
@@ -74,10 +104,13 @@ async function resolveCommand($: EngineInterface): Promise<string | undefined> {
   return KNOWN_COMMANDS.find(name => names.has(name))
 }
 
-/** Whether a run of `name` with `args` is a session-mode Kompreni explanation. */
+/**
+ * Whether a run of `name` with `args` is a session-mode Kompreni explanation or walkthrough.
+ * Both end with a snapshot line, so the next explanation starts after them.
+ */
 async function isSessionExplain($: EngineInterface, name: string, args: string): Promise<boolean> {
   const chosen = await $.store.get(COMMAND)
-  const isExplain = KNOWN_COMMANDS.includes(name) || name === chosen
+  const isExplain = KNOWN_COMMANDS.includes(name) || WALKTHROUGH_COMMANDS.includes(name) || name === chosen
   return isExplain && !HISTORY_ARGS.test(args)
 }
 
@@ -157,6 +190,7 @@ export const register: Register = on => {
     if (args.command !== undefined) await $.store.set(COMMAND, args.command.replace(/^\//, ''))
 
     const command = (await resolveCommand($)) ?? 'not found (set command=)'
+    const walkthrough = await resolveWalkthrough($)
     const pending = (await read($, sinceExplain)).length
     const lines = [
       `Kompreni offer: ${text(await $.store.get(ENABLED), 'on')}`,
@@ -164,6 +198,7 @@ export const register: Register = on => {
       `depth: ${text(await $.store.get(DEPTH), 'auto')}`,
       `level: ${text(await $.store.get(LEVEL), 'auto')}`,
       `command: /${command}`,
+      `walkthrough: ${walkthrough === undefined ? 'not installed' : `/${walkthrough}`}`,
       `files changed since the last explanation: ${pending}`,
       ...errors,
     ]
@@ -196,29 +231,50 @@ export const register: Register = on => {
       await update($, isDismissed, () => true)
     }
 
+    /** Fill the prompt box, unless it holds a draft. The count resets when the command runs, not here. */
+    const fill = async (prompt: string) => {
+      const box = await $.prompt.read()
+      if (box.text.trim() !== '') {
+        $.ui.toast('Kompreni: the prompt box has a draft, so nothing was filled in.')
+        return
+      }
+      const filled = await $.prompt.fill({ text: prompt })
+      if (filled.isFilled) await hide()
+    }
+
+    // Read the settings when a button is pressed, not the values captured when the band was drawn.
+    const chosen = async () => ({
+      depth: text(await $.store.get(DEPTH), 'auto'),
+      level: text(await $.store.get(LEVEL), 'auto'),
+    })
+
     const explain = async () => {
       const command = await resolveCommand($)
       if (command === undefined) {
         $.ui.toast('Kompreni: no explain skill found here. Set one with /kompreni-offer command=<name>.')
         return
       }
-      const box = await $.prompt.read()
-      if (box.text.trim() !== '') {
-        $.ui.toast('Kompreni: the prompt box has a draft, so nothing was filled in.')
-        return
-      }
-      // Read the settings now, not the values captured when the band was drawn.
-      const chosenDepth = text(await $.store.get(DEPTH), 'auto')
-      const chosenLevel = text(await $.store.get(LEVEL), 'auto')
+      const { depth: nowDepth, level: nowLevel } = await chosen()
       const nowScope = (await read($, hasExplained)) ? await read($, scope) : 'new'
-      const filled = await $.prompt.fill({ text: buildPrompt(command, chosenDepth, chosenLevel, nowScope) })
-      // The count resets when the explanation actually runs, not here.
-      if (filled.isFilled) await hide()
+      await fill(buildPrompt(command, nowDepth, nowLevel, nowScope))
+    }
+
+    const walkthroughCommand = await resolveWalkthrough($)
+    const walkthrough = async (code: 'key' | 'all') => {
+      if (walkthroughCommand === undefined) return
+      const { depth: nowDepth, level: nowLevel } = await chosen()
+      await fill(buildWalkthroughPrompt(walkthroughCommand, nowDepth, nowLevel, code))
     }
 
     const buttons = (
       <Box flexDirection="row" gap={1}>
         <Button key="explain" label="Explain" onPress={() => void explain()} />
+        {walkthroughCommand !== undefined && (
+          <Button key="walkthrough" label="Walkthrough" onPress={() => void walkthrough('key')} />
+        )}
+        {walkthroughCommand !== undefined && (
+          <Button key="code-tour" label="Code tour" onPress={() => void walkthrough('all')} />
+        )}
         <Button key="dismiss" label="Dismiss" onPress={() => void hide()} />
       </Box>
     )

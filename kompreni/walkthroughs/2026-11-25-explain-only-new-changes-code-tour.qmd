@@ -1,0 +1,833 @@
+---
+title: "Code tour: explaining only what's new since the last explanation"
+date: 2026-11-25
+format:
+  html:
+    embed-resources: true
+    toc: true
+    code-annotations: below
+kompreni:
+  schema: 1
+  kind: walkthrough
+  summary: "Session-mode explanations now cover only the changes since the previous Kompreni explanation, using git-tree snapshots that also catch shell-made edits; the offer mod counts files across turns until an explanation runs."
+  source: commit
+  base: 23858439baf570c5b6840faf247c40f948d21bdd
+  tip: c561b3abd20f058f3f94dc7ebe75f6781eb74320
+  dirty: false
+  branch: main
+  commits: [c561b3abd20f058f3f94dc7ebe75f6781eb74320]
+  files: [skills/explain/SKILL.md, skills/explain/references/output-guide.md, skills/explain/scripts/snapshot.py, tests/test_snapshot.py, mods/kompreni-offer/hooks/register.tsx, mods/kompreni-offer/types/index.d.ts, mods/kompreni-offer/tests/register.test.tsx]
+  level: intermediate
+  depth: deep
+  code: all
+  tests: "tests/test_snapshot.py: 7 passed (run later, on a checkout where snapshot.py and its tests are unchanged since this commit). Mod tests not run at this commit. No PR or CI."
+---
+
+## Overview {#sec-overview}
+
+Before this commit, a second `/kompreni:explain` in the same conversation explained everything since the last commit again. Now each explanation covers only what changed since the previous one. It does that by recording a git snapshot of the working tree and leaving a `Kompreni snapshot:` line for the next explanation to find. The optional `kompreni-offer` mod is changed to match: its file count runs across turns until an explanation runs.
+
+This is the **code tour** version: it shows all the changed code and explains it line by line. A shorter walkthrough of the same commit, with only the key excerpts, is in `2026-11-24-explain-only-new-changes.qmd`.
+
+::: {.callout-note title="At a glance"}
+- **Scope**: commit `c561b3a` on `main` (parent `2385843`). 17 files, +418/−37 lines.
+- **Toured**:
+    - the explain skill's instructions;
+    - the new `snapshot.py` and its tests;
+    - the mod's hooks, types and tests.
+
+  The docs and eval scenarios are listed in @sec-scope.
+- **Level**: intermediate. **Depth**: deep. **Code**: all.
+- **How to read the code**: the numbers in the margin are the real line numbers at `c561b3a`. Click a numbered explanation to highlight its lines.
+:::
+
+## The problem {#sec-problem}
+
+Explanations are often asked for more than once in a session. Before this commit, the second one re-explained the first change, because its only baseline was `HEAD` *(code)*. And changes made through shell commands (a `sed`, a code generator) had no record in the conversation at all. Git saw them, but the skill couldn't separate "since the last explanation" from "since the last commit". The commit message names catching "shell-made ones" as a goal *(commit `c561b3a`)*. The mod, meanwhile, only knew the current turn's edits.
+
+## Before {#sec-before}
+
+The running example, used throughout the tour:
+
+- **Turn 1.** Claude adds a `--retries` option to `upload.py` with its Edit tool. The user runs `/kompreni:explain`.
+- **Turn 2.** The user asks for a function to be renamed. Claude does it with one `sed` command over `upload.py` and `cli.py`. The user runs `/kompreni:explain` again.
+
+Nothing is committed. (This is an illustrative scenario, not files in this repo.)
+
+Before the commit, the second explanation ran `git diff --stat HEAD`, which listed both the retries option and the rename, so both were explained again. The mod had reset its list of edits at the start of turn 2. Turn 2 made no Edit or Write calls, so the mod offered nothing.
+
+## Code tour {#sec-tour}
+
+The tour follows the flow of a repeat explanation:
+1. the skill's instructions (the entry point);
+2. the snapshot script they call;
+3. the line that hands the snapshot to the next explanation;
+4. the mod, which tracks the same idea from Claude Code's events.
+
+The tests come last.
+
+### The skill takes a snapshot and finds its baseline {#sec-tour-skill}
+
+The explain skill is a set of instructions, so its "code" is Markdown. The changes start in the front matter and the argument table.
+
+```{.markdown .numberLines startFrom="4" filename="skills/explain/SKILL.md:4-9"}
+argument-hint: "[scope=new|all] [depth=brief|standard|deep] [level=new-to-programming|new-to-language|intermediate|advanced|<free text>] [branch=<name> [onto=<ref>] | since=<ref> | commit=<ref>] [focus=<path or topic>]" <!-- <1> -->
+---
+
+# Kompreni: explain the changes
+
+Help the user understand not just what changed, but how and why their codebase evolved. Write the explanation **in the conversation**. Create no files. (The snapshot in step 2 stores unreferenced objects inside `.git`; that's the one exception.) <!-- <2> -->
+```
+1. `scope=new|all` goes first in the hint shown when typing the command, because it's the argument a repeat explanation is most likely to need.
+2. The skill's promise to create no files gains one stated exception. A snapshot writes git objects into `.git`, but nothing in the working tree, the index or the branches *(code)*.
+
+```{.markdown .numberLines startFrom="25" filename="skills/explain/SKILL.md:25-26"}
+| `focus` | none | A path or topic. Explain only the changes relevant to it |
+| `scope` | `new` | Session mode only. `new`: only what changed since the last Kompreni explanation in this conversation (everything, if there wasn't one). `all`: everything this conversation changed, as one consolidated explanation | <!-- <1> -->
+```
+1. The new argument. `new` is the default, and "everything, if there wasn't one" makes a first explanation behave as before. It applies only in session mode, because history mode already names its own range.
+
+Step 2 is where the behaviour changes. The old step started straight with `git diff --stat HEAD`:
+
+::: {.panel-tabset group="before-after"}
+### Before
+```{.markdown .numberLines startFrom="35" filename="skills/explain/SKILL.md:35@2385843"}
+Run, in one Bash call: `git status --porcelain`, `git diff --stat HEAD`, and `git log --oneline -n 10`. Then: <!-- <1> -->
+```
+1. One baseline for every explanation: the last commit. In the running example, turn 2's explanation includes the retries option again.
+
+### After
+```{.markdown .numberLines startFrom="36" filename="skills/explain/SKILL.md:36-47"}
+**Take a snapshot first**: `python <skill>/scripts/snapshot.py --repo .` (`python3` if needed). It prints `tree=<sha> head=<sha>` and changes nothing in the working tree, index or branches. It lists any large untracked files it left out on stderr; mention those in the scope note. <!-- <1> -->
+
+**Find the baseline.** Look back in this conversation for the most recent line `Kompreni snapshot: tree=<sha> head=<sha>` from an earlier session-mode explanation. <!-- <2> -->
+
+- **`scope=new` and there is one**: explain only what changed since then. <!-- <3> -->
+  - Run `git diff --stat <old tree> <new tree>` and read diffs the same way (`git diff <old tree> <new tree> -- <path>`). This includes untracked files and shell-made changes. <!-- <4> -->
+  - Run `git log --oneline <old head>..HEAD` for commits made in between. <!-- <4> -->
+  - Before relying on the old snapshot, check it still exists (`git cat-file -e <old tree>`). If it doesn't, use this conversation's record of edits since that explanation, and say so. <!-- <5> -->
+  - Open with one line saying this covers the changes since the previous explanation. Under "How the pieces fit together", say how the new changes interact with the ones explained earlier; don't re-explain those. <!-- <6> -->
+- **Otherwise** (the first explanation in this conversation, or `scope=all`), cover everything the conversation changed, as below. With `scope=all` and earlier explanations, write one consolidated explanation, not a summary of the earlier ones. <!-- <7> -->
+
+For the whole-conversation case, run in one Bash call: `git status --porcelain`, `git diff --stat HEAD`, and `git log --oneline -n 10`. Then: <!-- <7> -->
+```
+1. Every explanation now starts by snapshotting, *before* deciding what to explain. In the running example, turn 1 gets `T1` and turn 2 gets `T2`. The script is toured in @sec-tour-snapshot.
+2. The baseline is found by reading the conversation, not a file. The previous explanation's last line carries it (see @sec-tour-handoff).
+3. The new default path. In turn 2 of the running example, the `T1` line exists, so only what changed after it is explained.
+4. Diffing two *trees*, not a tree against `HEAD`. That's what makes the `sed` rename visible and the retries option invisible: it is identical in `T1` and `T2`. The `git log` catches any commits made in between.
+5. Snapshot trees aren't referenced by any branch, so git may eventually prune them. This fallback is weaker, because the conversation's record misses shell-made edits, which is why it must be stated.
+6. A repeat explanation links to the earlier one instead of repeating it.
+7. The first explanation, or `scope=all`, falls through to the old behaviour, now labelled as "the whole-conversation case".
+:::
+
+### Taking a snapshot {#sec-tour-snapshot}
+
+`snapshot.py` is new. Its job is to turn "the working tree right now" into a git tree object without disturbing anything the user can see. The docstring states the contract:
+
+```{.python .numberLines startFrom="1" filename="skills/explain/scripts/snapshot.py:1-19"}
+#!/usr/bin/env python3
+"""Record the working tree's state as a git tree, without changing anything.  # <1>
+
+Prints one line, ``tree=<sha> head=<sha|none>``. Later, ``git diff <old tree>  # <2>
+<new tree>`` shows exactly what changed between two snapshots, including
+untracked files and changes made by shell commands or scripts.
+
+How: a temporary copy of the index (outside the repository) takes the current  # <3>
+working tree (``git add -u`` plus untracked, non-ignored files), and
+``git write-tree`` stores it. The working tree, the real index, branches,
+the stash and HEAD are untouched. The only effect is unreferenced objects in
+``.git``, which git cleans up in time.
+
+Untracked files larger than ``--max-untracked-mb`` (default 5) are left out  # <4>
+and listed on stderr, so large data files aren't copied into ``.git``.
+
+Exit status: 0 = printed a snapshot, 2 = not a git repository or git failed.  # <5>
+Standard library only.
+"""
+```
+1. The one promise everything else depends on: no visible change. `test_changes_nothing` checks it (see @sec-tour-tests).
+2. The output format, which the skill copies into its `Kompreni snapshot:` line. `head` can be `none` in a repository with no commits.
+3. The mechanism, in short. The code below follows these steps.
+4. A size limit. Every snapshot copies untracked files into `.git` as blobs, so a large data file would be copied each time *(code)*.
+5. Exit status 2 lets the skill tell "not a repository" apart from a snapshot. Standard library only, like `check_refs.py`, so the skill needs nothing installed beyond Python and git.
+
+```{.python .numberLines startFrom="20" filename="skills/explain/scripts/snapshot.py:20-30"}
+import argparse  # <1>
+import os  # <1>
+import shutil  # <1>
+import subprocess  # <1>
+import sys  # <1>
+import tempfile  # <1>
+
+
+def git(repo, *args, env=None, stdin=None):  # <2>
+    return subprocess.run(["git", "-C", repo, *args], capture_output=True,  # <2>
+                          env=env, input=stdin, check=True)  # <2>
+```
+1. Standard library only.
+2. A small helper. `-C repo` runs git in the repository wherever the script is called from. `env` is how the temporary index is passed in. `check=True` turns any git failure into an exception, which `main` catches in one place.
+
+```{.python .numberLines startFrom="33" filename="skills/explain/scripts/snapshot.py:33-47"}
+def main():
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)  # <1>
+    ap.add_argument("--repo", default=".", help="repository (default: current directory)")  # <1>
+    ap.add_argument("--max-untracked-mb", type=float, default=5.0,  # <1>
+                    help="leave out untracked files larger than this (default 5)")  # <1>
+    args = ap.parse_args()  # <1>
+
+    try:  # <2>
+        top = git(args.repo, "rev-parse", "--show-toplevel").stdout.decode().strip()  # <2>
+        git_dir = git(args.repo, "rev-parse", "--absolute-git-dir").stdout.decode().strip()  # <2>
+    except (subprocess.CalledProcessError, FileNotFoundError):  # <3>
+        print("error: not a git repository (or git is not installed)", file=sys.stderr)  # <3>
+        return 2  # <3>
+    head = subprocess.run(["git", "-C", top, "rev-parse", "--verify", "-q", "HEAD"],  # <4>
+                          capture_output=True).stdout.decode().strip() or "none"  # <4>
+```
+1. Two options. The size limit is a float, so tests can use a tiny limit such as `0.01`.
+2. Find the repository's top folder and its real `.git` folder. `--absolute-git-dir` also handles worktrees and submodules, where `.git` is a file pointing elsewhere *(inferred)*.
+3. `FileNotFoundError` covers git not being installed at all. Both cases end in exit status 2.
+4. `HEAD` is read without `check=True`, because a brand-new repository has no `HEAD` yet. It records `none` instead of failing.
+
+The core: build a tree from the working tree using a throwaway index.
+
+```{.python .numberLines startFrom="49" filename="skills/explain/scripts/snapshot.py:49-76"}
+    tmp_dir = tempfile.mkdtemp(prefix="kompreni-")  # <1>
+    try:
+        index = os.path.join(tmp_dir, "index")  # <2>
+        real_index = os.path.join(git_dir, "index")  # <2>
+        if os.path.exists(real_index):  # <2>
+            shutil.copyfile(real_index, index)  # reuses git's file-stat cache: fast  # <2>
+        env = {**os.environ, "GIT_INDEX_FILE": index}  # <3>
+
+        git(top, "add", "-u", env=env)  # tracked: modified and deleted  # <4>
+        others = git(top, "ls-files", "--others", "--exclude-standard", "-z").stdout  # <5>
+        limit = args.max_untracked_mb * 1024 * 1024  # <6>
+        keep, skipped = [], []  # <6>
+        for raw in filter(None, others.split(b"\0")):  # <6>
+            path = os.path.join(top, os.fsdecode(raw))  # <6>
+            try:  # <6>
+                size = os.path.getsize(path)  # <6>
+            except OSError:  # <6>
+                continue  # <6>
+            (skipped if size > limit else keep).append((raw, size))  # <6>
+        if keep:  # <7>
+            git(top, "add", "--pathspec-from-file=-", "--pathspec-file-nul", env=env,  # <7>
+                stdin=b"\0".join(raw for raw, _ in keep))  # <7>
+        tree = git(top, "write-tree", env=env).stdout.decode().strip()  # <8>
+    except subprocess.CalledProcessError as exc:  # <9>
+        print(f"error: git failed: {exc.stderr.decode(errors='replace').strip()}", file=sys.stderr)  # <9>
+        return 2  # <9>
+    finally:  # <10>
+        shutil.rmtree(tmp_dir, ignore_errors=True)  # <10>
+```
+1. The temporary index lives in the system temp folder, outside the repository, so nothing appears in `git status`.
+2. Start from a *copy* of the real index, so git can reuse its cached file timestamps and skip re-hashing files that haven't changed. A repository with no index yet (no commits) starts from an empty one.
+3. `GIT_INDEX_FILE` points every following git command at the copy. This is what keeps the real index, and with it the user's staged changes, untouched.
+4. Stage every modified and deleted tracked file into the copy. Deletions matter: `test_diff_between_snapshots_includes_untracked_and_deletions` checks them.
+5. List untracked files that aren't ignored, NUL-separated (`-z`), so names with spaces or newlines survive. Ignored files are never in a snapshot.
+6. Split the untracked files into those to keep and those over the size limit. A file that disappears between listing and measuring (`OSError`) is skipped rather than failing the snapshot.
+7. Add the kept files, passing the paths on stdin, NUL-separated, so a long list can't overflow the command line *(inferred)*.
+8. `write-tree` stores the copy as a tree object and prints its SHA. That SHA is the snapshot.
+9. Any git failure exits with status 2 and git's own message.
+10. The temporary folder is always removed, whether the snapshot succeeded or not.
+
+```{.python .numberLines startFrom="78" filename="skills/explain/scripts/snapshot.py:78-86"}
+    for raw, size in skipped:  # <1>
+        print(f"skipped untracked file over {args.max_untracked_mb:g} MB: "  # <1>
+              f"{os.fsdecode(raw)} ({size / 1024 / 1024:.1f} MB)", file=sys.stderr)  # <1>
+    print(f"tree={tree} head={head}")  # <2>
+    return 0  # <2>
+
+
+if __name__ == "__main__":  # <3>
+    sys.exit(main())  # <3>
+```
+1. Skipped files go to stderr, so stdout stays a single parseable line. The skill is told to mention them in its scope note.
+2. The one line of output. In the running example this is `tree=T1 head=H`, then `tree=T2 head=H`.
+3. The exit status from `main` becomes the process's exit status.
+
+### Every explanation hands over a snapshot line {#sec-tour-handoff}
+
+The snapshot only helps if the *next* explanation can find it. The conversation is the hand-over channel.
+
+```{.markdown .numberLines startFrom="53" filename="skills/explain/SKILL.md:53-54"}
+- **No git repo**: no snapshot is possible. Fall back to what this conversation edited (since the last explanation, for `scope=new`), and state that coverage may be incomplete. <!-- <1> -->
+- **Record the snapshot.** End every session-mode explanation with the line `Kompreni snapshot: tree=<sha> head=<sha>`, using the new snapshot, so that the next explanation can find it. <!-- <2> -->
+```
+1. Without git, the old fallback is extended to respect `scope=new`.
+2. The writing side of the hand-over. @sec-tour-skill is the reading side.
+
+The output guide makes the line part of every explanation's shape:
+
+```{.markdown .numberLines startFrom="13" filename="skills/explain/references/output-guide.md:13"}
+State the depth and the level (see `levels.md`) in a few words at the start, so the user can ask for more or less. When the explanation covers only changes since an earlier one (`scope=new`), say so in the same line, e.g. "Changes since the last explanation.". <!-- <1> -->
+```
+1. The reader is told up front that this explanation is partial.
+
+```{.markdown .numberLines startFrom="29" filename="skills/explain/references/output-guide.md:29"}
+11. **Snapshot line** (session mode, always the last line, even at `brief` depth): `Kompreni snapshot: tree=<sha> head=<sha>`. The next explanation uses it to cover only what changed since. Keep it exactly in this form. <!-- <1> -->
+```
+1. "Always the last line, even at `brief`": a short explanation that dropped the line would break the chain. "Keep it exactly in this form", because the reading side searches for this exact text.
+
+```{.markdown .numberLines startFrom="33" filename="skills/explain/references/output-guide.md:33"}
+A short paragraph: purpose, before and after, why (labelled if it isn't obvious), and verification. No headings, but still end with the snapshot line. Instead of a concepts section, gloss at most two concepts in parentheses at first mention (see `levels.md`). <!-- <1> -->
+```
+1. The brief format, which otherwise has no structure, is told explicitly to keep the line.
+
+### The mod counts across turns {#sec-tour-mod}
+
+The mod can't read snapshots. It tracks the same idea, "what's unexplained", from Claude Code's events. Its declared state changes first:
+
+::: {.panel-tabset group="before-after"}
+### Before
+```{.typescript .numberLines startFrom="1" filename="mods/kompreni-offer/types/index.d.ts:1-11@2385843"}
+/** The offer shown after a turn that edited files. */
+export type Offer = {  // <1>
+  /** Paths edited during the turn, by the main loop or its subagents. */
+  files: string[]
+}
+
+declare module 'claude-code' {
+  interface PluginState {
+    'kompreni-offer': { pending: Offer | null }  // <1>
+  }
+}
+```
+1. One piece of state: the offer for the turn that just ended, or `null`.
+
+### After
+```{.typescript .numberLines startFrom="1" filename="mods/kompreni-offer/types/index.d.ts:1-15"}
+/** Marks this file as a module so the declaration below augments 'claude-code'. */  // <1>
+export type KompreniOfferFiles = string[]  // <1>
+
+declare module 'claude-code' {
+  interface PluginState {
+    'kompreni-offer': {
+      /** Paths edited since the last Kompreni explanation in this session. */  // <2>
+      sinceExplain: KompreniOfferFiles  // <2>
+      /** Whether the offer row is showing. */  // <3>
+      isVisible: boolean  // <3>
+      /** Whether an explanation has run in this session (changes the row's wording). */  // <4>
+      hasExplained: boolean  // <4>
+    }
+  }
+}
+```
+1. A file with no top-level export is a global script, and `declare module` would then replace the module instead of adding to it. This export exists only to make the file a module, as its comment says.
+2. What used to be per-turn is now per-explanation: the files edited since the last explanation, across any number of turns.
+3. Whether the row shows is now separate from what it counts, so dismissing the row no longer loses the count.
+4. Only changes the wording: "in this conversation" before the first explanation, "since the last explanation" after.
+:::
+
+```{.typescript .numberLines startFrom="4" filename="mods/kompreni-offer/hooks/register.tsx:4-7"}
+// Session state: files edited since the last explanation, and whether to show the row.  // <1>
+const sinceExplain = atom({ plugin: 'kompreni-offer', key: 'sinceExplain' } as const, [])  // <1>
+const isVisible = atom({ plugin: 'kompreni-offer', key: 'isVisible' } as const, false)  // <1>
+const hasExplained = atom({ plugin: 'kompreni-offer', key: 'hasExplained' } as const, false)  // <1>
+```
+1. The three typed pieces of session state declared above, each with its starting value. Atoms are per session: a new session starts with an empty count, as the skill's baseline does.
+
+```{.typescript .numberLines startFrom="20" filename="mods/kompreni-offer/hooks/register.tsx:20-22"}
+const EDIT_TOOLS = new Set(['Edit', 'Write', 'NotebookEdit'])
+// History-mode runs explain a branch or commits, not this session's edits.  // <1>
+const HISTORY_ARGS = /\b(branch|since|commit)=/  // <1>
+```
+1. An explanation of a branch or a commit says nothing about this session's edits, so it mustn't reset the count. `\b` stops it matching inside a longer argument name.
+
+```{.typescript .numberLines startFrom="53" filename="mods/kompreni-offer/hooks/register.tsx:53-65"}
+/** Whether a run of `name` with `args` is a session-mode Kompreni explanation. */  // <1>
+async function isSessionExplain($: EngineInterface, name: string, args: string): Promise<boolean> {  // <1>
+  const chosen = await $.store.get(COMMAND)  // <1>
+  const isExplain = KNOWN_COMMANDS.includes(name) || name === chosen  // <1>
+  return isExplain && !HISTORY_ARGS.test(args)  // <1>
+}  // <1>
+
+/** An explanation ran: what it covered no longer counts as unexplained. */  // <2>
+async function markExplained($: EngineInterface): Promise<void> {  // <2>
+  await update($, sinceExplain, () => [])  // <2>
+  await update($, isVisible, () => false)  // <2>
+  await update($, hasExplained, () => true)  // <2>
+}  // <2>
+```
+1. One test, used by two routes: the user typing the command and Claude invoking the skill. It accepts the known names and any name the user set with `command=`, and it rejects history-mode runs.
+2. What "an explanation ran" means for the mod: the count empties, the row hides, and the wording switches to "since the last explanation". The skill's snapshot does the same job in git.
+
+```{.typescript .numberLines startFrom="67" filename="mods/kompreni-offer/hooks/register.tsx:67-70"}
+export const register: Register = on => {
+  // Edits in the current turn, so an offer appears only after a turn that changed something.  // <1>
+  // A reload resets it, which at worst skips one offer.  // <1>
+  let turnEdits = 0  // <1>
+```
+1. A per-turn counter remains, but now only to decide whether *this* turn earns a row. It's a plain variable, not an atom, because losing it on a reload costs at most one offer *(code)*.
+
+The four hooks, in the order a turn runs them:
+
+::: {.panel-tabset group="before-after"}
+### Before
+```{.typescript .numberLines startFrom="65" filename="mods/kompreni-offer/hooks/register.tsx:65-69@2385843"}
+  on('prompt.submit', async ($, e, next) => {
+    edited = new Set()  // <1>
+    await update($, pending, () => null)  // <1>
+    return next(e)
+  }).catch(($, e, next) => next(e)) // never block a prompt over a failed offer
+```
+1. Every prompt wiped the record. That's why turn 2 of the running example started with an empty count.
+
+### After
+```{.typescript .numberLines startFrom="81" filename="mods/kompreni-offer/hooks/register.tsx:81-88"}
+  on('prompt.submit', async ($, e, next) => {
+    turnEdits = 0  // <1>
+    await update($, isVisible, () => false)  // <1>
+    if (e.command !== undefined && (await isSessionExplain($, e.command.name, e.command.args))) {  // <2>
+      await markExplained($)  // <2>
+    }  // <2>
+    return next(e)
+  }).catch(($, e, next) => next(e)) // never block a prompt over a failed offer
+```
+1. A new prompt resets only the per-turn counter and hides the row. The count of unexplained files carries on.
+2. Route one: the user typed `/kompreni:explain` (or pressed Enter on a filled-in one). The count resets when the explanation actually runs, not when the button fills the prompt.
+:::
+
+::: {.panel-tabset group="before-after"}
+### Before
+```{.typescript .numberLines startFrom="71" filename="mods/kompreni-offer/hooks/register.tsx:71-79@2385843"}
+  on('tool.call', async ($, e, next) => {
+    const ran = await next(e)
+    if (EDIT_TOOLS.has(e.tool) && ran.deny === undefined && ran.isError !== true) {  // <1>
+      const input = e as unknown as { file_path?: string; notebook_path?: string }
+      const path = input.file_path ?? input.notebook_path
+      if (path !== undefined) edited.add(path)  // <1>
+    }
+    return ran
+  }).catch(($, e, next) => next(e)) // never block or change a tool call
+```
+1. Only edits were watched, into a per-turn set.
+
+### After
+```{.typescript .numberLines startFrom="90" filename="mods/kompreni-offer/hooks/register.tsx:90-104"}
+  on('tool.call', async ($, e, next) => {
+    const ran = await next(e)
+    if (ran.deny !== undefined || ran.isError === true) return ran  // <1>
+    const input = e as unknown as { file_path?: string; notebook_path?: string; skill?: string; args?: string }  // <2>
+    if (EDIT_TOOLS.has(e.tool)) {
+      const path = input.file_path ?? input.notebook_path
+      if (path !== undefined) {  // <3>
+        turnEdits += 1  // <3>
+        await update($, sinceExplain, files => (files.includes(path) ? files : [...files, path]))  // <3>
+      }  // <3>
+    } else if (e.tool === 'Skill' && input.skill !== undefined) {  // <4>
+      if (await isSessionExplain($, input.skill, input.args ?? '')) await markExplained($)  // <4>
+    }
+    return ran
+  }).catch(($, e, next) => next(e)) // never block or change a tool call
+```
+1. Denied or failed calls are ignored first, for both kinds of call below.
+2. The tool's input now also carries `skill` and `args`, for Skill tool calls.
+3. An edit counts towards this turn, and adds its path to the running list once. Editing `upload.py` in two turns still counts as one file.
+4. Route two: Claude invoked the explain skill itself, for example after "walk me through what you changed". Without this, asking in words would never reset the count.
+:::
+
+```{.typescript .numberLines startFrom="106" filename="mods/kompreni-offer/hooks/register.tsx:106-114"}
+  on('turn.complete', async ($, e, next) => {
+    const done = await next(e)
+    const isMainAnswer = e.agentId === undefined && e.reason === 'answer'
+    const isEnabled = text(await $.store.get(ENABLED), 'on') === 'on'
+    if (isMainAnswer && isEnabled && turnEdits > 0) {  // <1>
+      await update($, isVisible, () => true)  // <1>
+    }
+    return done
+  }).catch(($, e, next) => next(e))
+```
+1. At the end of a main-conversation turn that edited something, the row is shown. The count it shows is the whole `sinceExplain` list, not just this turn. In the running example, turn 2's `sed` made no Edit calls, so `turnEdits` is 0 and no row appears (see @sec-limitations).
+
+The settings command reports the count too:
+
+```{.typescript .numberLines startFrom="127" filename="mods/kompreni-offer/hooks/register.tsx:127-137"}
+    const command = (await resolveCommand($)) ?? 'not found (set command=)'
+    const pending = (await read($, sinceExplain)).length  // <1>
+    const lines = [
+      `Kompreni offer: ${text(await $.store.get(ENABLED), 'on')}`,
+      `depth: ${text(await $.store.get(DEPTH), 'auto')}`,
+      `level: ${text(await $.store.get(LEVEL), 'auto')}`,
+      `command: /${command}`,
+      `files changed since the last explanation: ${pending}`,  // <1>
+      ...errors,
+    ]
+    return { text: lines.join('\n') }
+```
+1. `/kompreni-offer` with no arguments now shows how many files are waiting to be explained.
+
+And the row reads the new state:
+
+```{.typescript .numberLines startFrom="140" filename="mods/kompreni-offer/hooks/register.tsx:140-149"}
+  on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
+    const files = await read($, sinceExplain)  // <1>
+    if (e.props.hasSurvey || !(await read($, isVisible)) || files.length === 0) return next(e)  // <1>
+
+    const depth = text(await $.store.get(DEPTH), 'auto')
+    const level = text(await $.store.get(LEVEL), 'auto')
+    const levels = LEVELS.includes(level) ? LEVELS : [...LEVELS, level]
+    const since = (await read($, hasExplained)) ? 'since the last explanation' : 'in this conversation'  // <2>
+    const { Box, Button, Select, Text } = $.ui.resolve(e)
+    const n = files.length  // <1>
+```
+1. The row draws only when it's visible *and* something is unexplained, and its number is the running count.
+2. The wording that `hasExplained` exists for.
+
+```{.typescript .numberLines startFrom="162" filename="mods/kompreni-offer/hooks/register.tsx:162-168"}
+      // Read the settings now, not the values captured when the band was drawn.
+      const chosenDepth = text(await $.store.get(DEPTH), 'auto')
+      const chosenLevel = text(await $.store.get(LEVEL), 'auto')
+      const filled = await $.prompt.fill({ text: buildPrompt(command, chosenDepth, chosenLevel) })
+      // The count resets when the explanation actually runs, not here.  // <1>
+      if (filled.isFilled) await update($, isVisible, () => false)  // <1>
+    }
+```
+1. Filling in the command only hides the row. If the user then deletes the command instead of sending it, the files are still counted. A test pins this down.
+
+```{.typescript .numberLines startFrom="172" filename="mods/kompreni-offer/hooks/register.tsx:172-174"}
+        <Text dimColor>
+          Kompreni: {n} file{n === 1 ? '' : 's'} changed {since}.  // <1>
+        </Text>
+```
+1. For example, "Kompreni: 2 files changed since the last explanation."
+
+```{.typescript .numberLines startFrom="189" filename="mods/kompreni-offer/hooks/register.tsx:189-190"}
+        <Button key="explain" label="Explain" onPress={() => void explain()} />
+        <Button key="dismiss" label="Dismiss" onPress={() => void update($, isVisible, () => false)} />  // <1>
+```
+1. Dismiss now only hides the row. It used to throw the offer away; now the count survives until an explanation runs.
+
+### Tests {#sec-tour-tests}
+
+::: {.callout-note collapse="true" title="Tests: tests/test_snapshot.py (7 new tests)"}
+```{.python .numberLines startFrom="1" filename="tests/test_snapshot.py:1-40"}
+"""Tests for skills/explain/scripts/snapshot.py. Run: python -m unittest discover tests"""
+import hashlib
+import shutil
+import subprocess
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+
+SCRIPT = Path(__file__).resolve().parents[1] / "skills" / "explain" / "scripts" / "snapshot.py"
+
+
+def git(repo, *args):  # <1>
+    return subprocess.run(["git", "-C", str(repo), *args], check=True,  # <1>
+                          capture_output=True, text=True).stdout  # <1>
+
+
+def snapshot(repo, *extra):  # <2>
+    p = subprocess.run([sys.executable, str(SCRIPT), "--repo", str(repo), *extra],  # <2>
+                       capture_output=True, text=True)  # <2>
+    return p.returncode, p.stdout.strip(), p.stderr  # <2>
+
+
+def parse(line):  # <3>
+    return dict(part.split("=") for part in line.split())  # <3>
+
+
+class SnapshotTest(unittest.TestCase):
+    def setUp(self):  # <4>
+        self.repo = Path(tempfile.mkdtemp())  # <4>
+        git(self.repo, "init", "-q", "-b", "main")  # <4>
+        git(self.repo, "config", "user.email", "t@example.com")  # <4>
+        git(self.repo, "config", "user.name", "t")  # <4>
+        (self.repo / "a.py").write_text("one\n")  # <4>
+        (self.repo / ".gitignore").write_text("ignored.txt\n")  # <4>
+        git(self.repo, "add", ".")  # <4>
+        git(self.repo, "commit", "-qm", "init")  # <4>
+
+    def tearDown(self):
+        shutil.rmtree(self.repo, ignore_errors=True)
+```
+1. A git helper that returns stdout as text.
+2. Runs the script as a separate process, as the skill does, and returns its exit status, its one line and its stderr.
+3. Turns `tree=… head=…` into a dictionary.
+4. Each test gets a fresh repository with one commit, one tracked file and a `.gitignore`.
+
+```{.python .numberLines startFrom="42" filename="tests/test_snapshot.py:42-73"}
+    def test_diff_between_snapshots_includes_untracked_and_deletions(self):  # <1>
+        code, first, _ = snapshot(self.repo)
+        self.assertEqual(code, 0)
+        (self.repo / "a.py").write_text("two\n")
+        (self.repo / "new.py").write_text("x\n")
+        (self.repo / "ignored.txt").write_text("secret\n")
+        (self.repo / ".gitignore").unlink()
+        _, second, _ = snapshot(self.repo)
+        changed = git(self.repo, "diff", "--name-status", parse(first)["tree"], parse(second)["tree"])
+        self.assertIn("M\ta.py", changed)
+        self.assertIn("A\tnew.py", changed)
+        self.assertIn("D\t.gitignore", changed)
+
+    def test_ignored_files_left_out(self):  # <2>
+        (self.repo / "ignored.txt").write_text("secret\n")
+        _, line, _ = snapshot(self.repo)
+        files = git(self.repo, "ls-tree", "-r", "--name-only", parse(line)["tree"])
+        self.assertNotIn("ignored.txt", files)
+
+    def test_changes_nothing(self):  # <3>
+        (self.repo / "a.py").write_text("staged\n")
+        git(self.repo, "add", "a.py")
+        (self.repo / "a.py").write_text("unstaged\n")
+        (self.repo / "new.py").write_text("x\n")
+        index = self.repo / ".git" / "index"
+        before = (git(self.repo, "status", "--porcelain"), hashlib.sha1(index.read_bytes()).hexdigest(),
+                  git(self.repo, "rev-parse", "HEAD"), git(self.repo, "stash", "list"))
+        snapshot(self.repo)
+        after = (git(self.repo, "status", "--porcelain"), hashlib.sha1(index.read_bytes()).hexdigest(),
+                 git(self.repo, "rev-parse", "HEAD"), git(self.repo, "stash", "list"))
+        self.assertEqual(before, after)
+        self.assertEqual((self.repo / "a.py").read_text(), "unstaged\n")
+```
+1. The central claim: diffing two snapshots shows a modification, an untracked new file and a deletion. This is the running example's rename, in miniature.
+2. Ignored files never enter a snapshot.
+3. The "no visible change" promise. With a staged change, a different unstaged change and an untracked file, the status, the index's exact bytes, `HEAD`, the stash and the file's contents are all identical before and after.
+
+```{.python .numberLines startFrom="75" filename="tests/test_snapshot.py:75-115"}
+    def test_records_head_and_sees_commits(self):  # <1>
+        _, first, _ = snapshot(self.repo)
+        (self.repo / "a.py").write_text("committed\n")
+        git(self.repo, "commit", "-qam", "change")
+        _, second, _ = snapshot(self.repo)
+        self.assertNotEqual(parse(first)["head"], parse(second)["head"])
+        changed = git(self.repo, "diff", "--name-only", parse(first)["tree"], parse(second)["tree"])
+        self.assertIn("a.py", changed)
+
+    def test_large_untracked_file_skipped(self):  # <2>
+        (self.repo / "big.csv").write_bytes(b"x" * 20000)
+        code, line, err = snapshot(self.repo, "--max-untracked-mb", "0.01")
+        self.assertEqual(code, 0)
+        self.assertIn("skipped untracked file", err)
+        self.assertIn("big.csv", err)
+        files = git(self.repo, "ls-tree", "-r", "--name-only", parse(line)["tree"])
+        self.assertNotIn("big.csv", files)
+
+    def test_repo_without_commits(self):  # <3>
+        fresh = Path(tempfile.mkdtemp())
+        try:
+            git(fresh, "init", "-q")
+            (fresh / "f.txt").write_text("x\n")
+            code, line, _ = snapshot(fresh)
+            self.assertEqual(code, 0)
+            self.assertEqual(parse(line)["head"], "none")
+        finally:
+            shutil.rmtree(fresh, ignore_errors=True)
+
+    def test_not_a_repo(self):  # <4>
+        plain = Path(tempfile.mkdtemp())
+        try:
+            code, _, err = snapshot(plain)
+            self.assertEqual(code, 2)
+            self.assertIn("not a git repository", err)
+        finally:
+            shutil.rmtree(plain, ignore_errors=True)
+
+
+if __name__ == "__main__":
+    unittest.main()
+```
+1. A commit between snapshots shows up both as a new `head` and in the tree diff. That's what lets the skill run `git log <old head>..HEAD`.
+2. The size limit: the file is reported on stderr and left out of the tree.
+3. A repository with no commits still gets a snapshot, with `head=none`.
+4. Exit status 2 outside a repository.
+:::
+
+::: {.callout-note collapse="true" title="Tests: mods/kompreni-offer/tests/register.test.tsx (6 new tests, 2 lines changed)"}
+```{.typescript .numberLines startFrom="1" filename="mods/kompreni-offer/tests/register.test.tsx:1-3"}
+import { expect, test } from 'claude-code/testing'
+import type { Engine } from 'claude-code/testing'  // <1>
+import type { On } from 'claude-code'
+```
+1. The `Engine` type, needed by the shared setup helper below.
+
+```{.typescript .numberLines startFrom="80" filename="mods/kompreni-offer/tests/register.test.tsx:80"}
+    expect((await ui.find({ type: 'Text', text: /Kompreni/ }))?.text).toBe('Kompreni: 1 file changed in this conversation.')  // <1>
+```
+1. An existing test updated for the new wording.
+
+```{.typescript .numberLines startFrom="155" filename="mods/kompreni-offer/tests/register.test.tsx:155-191"}
+// Shared setup for the accumulation tests: the engine stubs, and helpers for a turn.
+const setUp = ($: Engine, on: On) => {  // <1>
+  memoryStore(on)  // <1>
+  on('tool.call', () => ({ result: {} }))  // <1>
+  on('turn.complete', (_, e) => ({ text: e.answer }))  // <1>
+  on('prompt.submit', (_, e) => ({ text: e.text }))  // <1>
+  const editTurn = async (path: string) => {  // <2>
+    await $.prompt.submit(typed('change something'))  // <2>
+    await $.tool.call({ tool: 'Edit', file_path: path, old_string: 'a', new_string: 'b' })  // <2>
+    await $.turn.complete(turn())  // <2>
+  }  // <2>
+  const rowText = async () => {  // <3>
+    const ui = await $.ui.mount({ ...BAND, surface: 'vscode' })  // <3>
+    const found = (await ui.find({ type: 'Text', text: /Kompreni/ }))?.text  // <3>
+    await ui.unmount()  // <3>
+    return found  // <3>
+  }  // <3>
+  return { editTurn, rowText }
+}
+
+test('edits accumulate across turns until an explanation runs', async ($, on) => {  // <4>
+  const { editTurn, rowText } = setUp($, on)
+  await editTurn('/repo/a.py')
+  await editTurn('/repo/b.py')
+  await editTurn('/repo/a.py')
+  expect(await rowText()).toBe('Kompreni: 2 files changed in this conversation.')
+})
+
+test('a turn with no edits hides the row but keeps the count', async ($, on) => {  // <5>
+  const { editTurn, rowText } = setUp($, on)
+  await editTurn('/repo/a.py')
+  await $.prompt.submit(typed('just a question'))
+  await $.turn.complete(turn())
+  expect(await rowText()).toBeUndefined()
+  await editTurn('/repo/b.py')
+  expect(await rowText()).toBe('Kompreni: 2 files changed in this conversation.')
+})
+```
+1. Stubs for the engine events the mod passes through.
+2. One whole turn that edits a file: prompt, edit, finish.
+3. The row's text, or `undefined` if no row is drawn.
+4. Three turns, two distinct files: the count is 2, not 3 and not 1.
+5. A question-only turn hides the row, but the next edit brings back the full count.
+
+```{.typescript .numberLines startFrom="193" filename="mods/kompreni-offer/tests/register.test.tsx:193-234"}
+test('a typed explain command resets the count', async ($, on) => {  // <1>
+  const { editTurn, rowText } = setUp($, on)
+  await editTurn('/repo/a.py')
+  await $.prompt.submit({ ...typed('/kompreni:explain depth=brief'), command: { name: 'kompreni:explain', args: 'depth=brief' } })
+  await $.turn.complete(turn())
+  await editTurn('/repo/b.py')
+  expect(await rowText()).toBe('Kompreni: 1 file changed since the last explanation.')
+})
+
+test('Claude invoking the skill resets the count', async ($, on) => {  // <2>
+  const { editTurn, rowText } = setUp($, on)
+  await editTurn('/repo/a.py')
+  await $.prompt.submit(typed('explain what you changed'))
+  await $.tool.call({ tool: 'Skill', skill: 'kompreni-explain', args: '' })
+  await $.turn.complete(turn())
+  await editTurn('/repo/b.py')
+  expect(await rowText()).toBe('Kompreni: 1 file changed since the last explanation.')
+})
+
+test('a history-mode explanation does not reset the count', async ($, on) => {  // <3>
+  const { editTurn, rowText } = setUp($, on)
+  await editTurn('/repo/a.py')
+  await $.prompt.submit({ ...typed('/kompreni:explain branch=main'), command: { name: 'kompreni:explain', args: 'branch=main' } })
+  await $.tool.call({ tool: 'Skill', skill: 'kompreni:explain', args: 'commit=abc123' })
+  await $.turn.complete(turn())
+  await editTurn('/repo/b.py')
+  expect(await rowText()).toBe('Kompreni: 2 files changed in this conversation.')
+})
+
+test('filling the command without running it keeps the count', async ($, on) => {  // <4>
+  const { editTurn, rowText } = setUp($, on)
+  on('command.list', () => ({ value: [command('kompreni:explain')] }))
+  on('prompt.read', () => ({ value: { text: '', cursor: 0 } }))
+  on('prompt.fill', (_, e) => ({ isFilled: true, text: e.text, cursor: e.text.length }))
+  await editTurn('/repo/a.py')
+  const ui = await $.ui.mount({ ...BAND, surface: 'vscode' })
+  await ui.press({ key: 'explain' })
+  await ui.unmount()
+  expect(await rowText()).toBeUndefined()
+  await editTurn('/repo/b.py')
+  expect(await rowText()).toBe('Kompreni: 2 files changed in this conversation.')
+})
+```
+1. Route one from @sec-tour-mod: typing the command resets the count, and the wording changes.
+2. Route two: the Skill tool, here under the plain-skill name `kompreni-explain`.
+3. Both routes with history-mode arguments (`branch=`, `commit=`) leave the count alone.
+4. Pressing Explain only fills in the prompt. Without sending it, the count is kept.
+:::
+
+**Housekeeping**: README sections, the mod README, a worked example of a second explanation in `skills/explain/references/examples.md`, eval scenarios 18-21, and HISTORY and HANDOVER entries. These are not toured (see @sec-scope).
+
+## How the pieces fit together {#sec-fit}
+
+```{mermaid}
+%%| label: fig-two-explanations
+%%| fig-cap: "Two explanations in one conversation, after this commit"
+sequenceDiagram
+  participant U as User
+  participant S as Explain skill
+  participant G as Git
+  U->>S: /kompreni:explain
+  S->>G: snapshot.py
+  G-->>S: tree=T1 head=H
+  S-->>U: explanation, ends with snapshot line T1
+  Note over U,G: rename made with sed in Bash
+  U->>S: /kompreni:explain
+  S->>G: snapshot.py
+  G-->>S: tree=T2 head=H
+  S->>G: git diff T1 T2
+  G-->>S: only the rename
+  S-->>U: explanation of the rename, ends with line T2
+```
+
+As @fig-two-explanations shows, the skill and the script talk only through text and git. The snapshot line in the conversation is the only link between two explanations, and git does every comparison. The mod runs alongside with its own, event-based estimate of the same thing. It never reads snapshots, so its count can differ from what the skill explains. The skill, reading git, is the authority.
+
+## Decisions and alternatives {#sec-decisions}
+
+- **The baseline lives in the conversation, not in a file**, keeping the skill's rule of creating no files (`skills/explain/SKILL.md:9`) *(code)*. A new conversation therefore always starts fresh *(inferred)*.
+- **A temporary index rather than `git stash create`.** The commit message stresses that the stash and index are untouched *(commit `c561b3a`)*. `git stash create` doesn't include untracked files by default, and new files are among the commonest changes an agent makes. That is probably why a full tree via a temporary index was chosen *(inferred)*.
+- **Two routes reset the mod's count**: the typed command and the Skill tool. That way asking in words works too *(code)*.
+- **Filling in the command doesn't reset the count, running it does** *(code)*. Presumably this is so that an abandoned prompt doesn't hide unexplained work *(inferred)*.
+
+## Verification {#sec-verification}
+
+- **`tests/test_snapshot.py`**: 7 tests. They were run in this repository on a checkout where `snapshot.py` and its tests are unchanged since `c561b3a`, and all **7 passed**.
+- **Mod tests**: 6 new tests and 1 updated (toured above). They were not run at this commit; `register.tsx` has changed since, so a run today wouldn't test this version.
+- **Eval scenarios 18-21** describe the end-to-end checks. They have not been run.
+- No pull request was found, so there are no CI results.
+
+## Limitations and knock-on effects {#sec-limitations}
+
+- **The mod can't see shell-made changes.** In the running example, turn 2 shows no row, even though the skill would explain the rename. This is documented in the mod's README.
+- **Compaction can drop the snapshot line.** The next explanation then finds no baseline, and covers the whole conversation again. That's safe, but repetitive *(inferred)*.
+- **Pruned snapshots.** If git garbage-collects a snapshot tree first, the skill falls back to the conversation's record, which misses shell-made changes (annotation 5 of the After tab in @sec-tour-skill).
+- **Snapshots leave out** ignored files and untracked files over the size limit.
+
+::: {.callout-warning title="If you change the snapshot line's format"}
+The writing side (`SKILL.md` step 2, the output guide's item 11) and the reading side (`SKILL.md` step 2, "Find the baseline") must change together.
+:::
+
+## Check your understanding {#sec-check}
+
+**1. In the running example, why doesn't the retries option appear in turn 2's explanation, when it's still uncommitted?**
+
+::: {.callout-note collapse="true" title="Answer"}
+Turn 2 diffs snapshot `T1` against `T2`, not `HEAD` against the working tree. The retries option is identical in both trees, so the diff doesn't show it. See @sec-tour-skill.
+:::
+
+**2. What in `snapshot.py` guarantees that the user's staged changes are untouched?**
+
+::: {.callout-note collapse="true" title="Answer"}
+`GIT_INDEX_FILE` points every git command at a copy of the index in a temp folder, so the real index is never written. `test_changes_nothing` checks the real index's bytes before and after. See @sec-tour-snapshot.
+:::
+
+**3. A user types `/kompreni:explain branch=main`. Which line in the mod stops the count resetting?**
+
+::: {.callout-note collapse="true" title="Answer"}
+`isSessionExplain` returns `isExplain && !HISTORY_ARGS.test(args)`, and `HISTORY_ARGS` matches `branch=`. So `markExplained` isn't called. See @sec-tour-mod.
+:::
+
+## Worth remembering {#sec-remember}
+
+- A snapshot is a git tree built through a throwaway index. Two snapshots diffed with git are the source of truth for "what changed since".
+- The baseline is the last `Kompreni snapshot:` line in the conversation. If there isn't one, the explanation covers everything.
+- The mod's count is an estimate from Edit and Write events. The skill's diff from git is what counts.
+
+## Scope and provenance {#sec-scope}
+
+- **Range**: `c561b3a` against its parent `2385843`, so one commit and 17 files. Line numbers are at `c561b3a`, except in blocks marked `@2385843`.
+- **Not toured** (documentation and housekeeping):
+    - `README.md`, `HISTORY.md`, `HANDOVER-working.md`;
+    - `evals/README.md`, `evals/scenarios/18-second-explanation.md` to `21-mod-count.md`;
+    - `mods/kompreni-offer/README.md`;
+    - `skills/explain/references/examples.md`, a worked example of a second explanation.
+- **Rationale**: from the commit message and the code. No pull request was found, and the commit isn't on the remote, so references carry no permalinks.
+- **Written in** history mode (`/kompreni:walkthrough commit=c561b3a code=all`).

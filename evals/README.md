@@ -11,7 +11,7 @@ Manual scenarios for checking `/kompreni:explain` and `/kompreni:walkthrough`. E
 
 Scenarios 09-13 test history mode. They need a repo with branches and commits set up first; the chat history doesn't matter, except in 13.
 
-Scenarios 22-27 test walkthroughs. Score them on rubric items 1-13 as well as 15-18, reading the written file rather than the chat reply.
+Scenarios 22-29 test walkthroughs. Score them on rubric items 1-13 as well as 15-19, reading the written file rather than the chat reply. Scenario 30 tests the mod's walkthrough buttons.
 
 ## Rubric (pass / partial / fail each)
 
@@ -33,6 +33,7 @@ Scenarios 22-27 test walkthroughs. Score them on rubric items 1-13 as well as 15
 16. Walkthrough: it teaches rather than pads: the problem comes first, one running example is traced before and after, diagrams and annotated excerpts earn their place, and length is within the band
 17. Walkthrough: the questions are answerable from the document, and every answer matches the code
 18. Walkthrough: the file is in the right place with the right name, `check_refs.py` passes on it, a `qmd` renders with no warnings (or rendering was skipped for a stated reason), and the front matter is complete with correct SHAs and file list
+19. Code tour (`code=all`): every substantive changed line is shown or listed as not toured (check with `--coverage`); annotations say why, not just what; line numbers match the files; tests are annotated inside collapsed callouts
 
 Unit tests for the checker: `python -m unittest discover tests`.
 
@@ -42,3 +43,8 @@ Unit tests for the checker: `python -m unittest discover tests`.
     - Item 18 passes: the checker passes with `--ref c561b3a`, after it caught one wrong range; `quarto render` gives no warnings; the HTML is ignored by git; the front matter SHAs were taken from `git rev-parse`.
     - Item 7 is partial: one wrong path in prose (no line number) wasn't caught by the checker and was found on re-reading.
     - Items 15-17 have not been scored independently.
+- 2026-11-25, code tour dogfood, `/kompreni:walkthrough commit=c561b3a code=all`. Output: [`kompreni/walkthroughs/2026-11-25-explain-only-new-changes-code-tour.qmd`](../kompreni/walkthroughs/2026-11-25-explain-only-new-changes-code-tour.qmd). Not independent either.
+    - 36 annotated blocks. The checker found one snippet missing its last line, which was then fixed.
+    - Coverage: all 30 remaining notes are in files listed as not toured.
+    - The render is clean, and a script confirmed that every annotation targets exactly the lines carrying its marker.
+    - Item 19 passes on the mechanics; how well the annotations teach hasn't been judged by anyone else.
