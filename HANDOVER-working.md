@@ -14,6 +14,23 @@ Tracks [HANDOVER-original.md](HANDOVER-original.md): what has and hasn't been ac
 - [x] §7 Support learning and retention: prior-knowledge levels (`references/levels.md`) and a "Concepts used here" section
 - [x] §9 Phase 1 scaffolding: skill, examples, eval scenarios
 
+## Layer 2: structured walkthroughs (§4, §9 Phase 2)
+
+- [x] `/kompreni:walkthrough` (`skills/walkthrough/`). It reuses explain's collection, grouping, levels, history mode and scripts by path, and writes `kompreni/walkthroughs/<date>-<slug>.{qmd,md}`
+- [x] Markdown versus Quarto: `.qmd` by default when Quarto is available, GFM `.md` otherwise (`references/formats.md`). Both share one structure
+- [x] Document structure, annotated code, diagrams, before/after and learning questions (`references/structure.md`). This partly answers §10 Q6 (educational rather than verbose): problem first, one running example traced before and after, diagrams only when the flow changed, optional depth collapsed, checked answers. It also partly answers Q7 (Quarto without complexity): a single file rendered to one self-contained HTML, no project, no extensions
+- [x] "When is a full walkthrough worthwhile": a proportionality gate. Brief-sized changes get the suggestion to use explain instead, and the user is asked before anything is written. Standard-sized changes get a short walkthrough, deep ones a full one
+- [x] Front matter `kompreni:` (schema 1) as the seed of the Phase 3 knowledge format (`references/front-matter.md`)
+- [x] `check_refs.py` handles Quarto blocks, front matter and GitHub permalinks. Unit tested
+- [x] Dogfood: `commit=c561b3a`. The output is `kompreni/walkthroughs/2026-11-24-explain-only-new-changes.qmd`
+    - It renders cleanly and the checker passes
+    - The checker caught one wrong line range. A wrong path in prose with no line number was found only by re-reading
+    - A GFM conversion of it also passes the checker; GitHub rendering itself is unchecked
+    - Caveat: written by the same agent that wrote the skill, so it's not an independent test
+- [ ] Scenarios 22-27 not yet run, in particular by a fresh agent (`claude --plugin-dir .`) with no prior context
+- [ ] GFM output not yet viewed on GitHub (alerts, mermaid, `<details>`)
+- [ ] Quarto quirk to remember: inside an existing Quarto project, `quarto render <file>` writes into the project's output dir, and website projects pick up `kompreni/walkthroughs/` on their next full render. `render=auto` skips rendering there and says so
+
 ## In progress / not yet verified
 
 - [ ] §9 Phase 1: "Test this on several different types of changes": the 8 scenarios in `evals/scenarios/` are written but **not yet run**
@@ -26,8 +43,9 @@ Tracks [HANDOVER-original.md](HANDOVER-original.md): what has and hasn't been ac
 
 ## Deferred
 
-- [ ] §4 Layer 2 structured walkthroughs (Quarto)
-- [ ] §4 Layer 3 persistent knowledge, §9 Phases 3 and 5
+- [ ] §4 Layer 3 persistent knowledge, §9 Phases 3 and 5. The walkthrough front matter is the starting point. Next: an index or listing across `kompreni/walkthroughs/`, and how agents find relevant walkthroughs before changing code
+- [ ] Walkthroughs: a "Walkthrough" button in `kompreni-offer`, and adding `kompreni:walkthrough` to its `KNOWN_COMMANDS` so that a walkthrough resets the count. Wait until the mod has been tried live
+- [ ] Walkthroughs: re-pin a `dirty: true` walkthrough to a SHA after commit; interactive exercises beyond collapsed Q&A
 - [x] §5 / §9 Phase 4 first mod: `mods/kompreni-offer` (an Explain row above the prompt, shown always by default or only after turns with edits via `show=changes`; fills the command). Validated, type-checked and unit-tested; **not yet tried in a live session or in VS Code**
 - [ ] Mods: richer UI (a pane listing changed files, per-file explain), capture of Bash-made changes (e.g. a git snapshot per turn), access to earlier explanations
 - [ ] §5 Other agent integrations
@@ -40,4 +58,4 @@ Tracks [HANDOVER-original.md](HANDOVER-original.md): what has and hasn't been ac
 
 ## Open questions (§10)
 
-Q10 (simplest MVP) is answered by this layer. The rest wait on Layers 2-3.
+Q10 (simplest MVP) is answered by Layer 1. Q6 and Q7 are partly answered by Layer 2 (see above), pending scenario runs. Q8 (persistent format) has a first draft in the walkthrough front matter. Q9 waits on Layer 3.

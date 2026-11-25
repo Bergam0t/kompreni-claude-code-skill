@@ -30,3 +30,12 @@
     - The mod's row puts each picker on its own line, with its label on the left and the picker filling the width (mod version 0.1.1)
     - The mod's row now shows whenever Claude isn't working, even before any edits; `/kompreni-offer show=changes` restores showing it only after turns that edit files (mod version 0.1.2)
     - When there's nothing new to explain, the row shrinks to one line with Explain, Dismiss and, after an explanation, Whole conversation
+- Add `/kompreni:walkthrough`, which writes a structured, persistent walkthrough of changes as Quarto (`.qmd`) or GitHub-flavoured Markdown (`.md`)
+    - Saved to `kompreni/walkthroughs/<date>-<slug>.qmd` (or `out=`), standalone for a reader who wasn't in the conversation
+    - Teaches rather than reports: the problem first, one running example traced before and after, annotated excerpts, before/after tabs, a diagram only when the flow changed, and questions with hidden, checked answers (`quiz=off` to omit)
+    - `.qmd` when Quarto is installed, otherwise `.md`; `format=` overrides. A `.qmd` is rendered to one self-contained HTML file (gitignored), except inside an existing Quarto project
+    - Shares session and history mode, `level=` and `focus=` with explain; covers the whole conversation by default; asks before writing one for a small change
+    - Uncommitted changes are written up with a visible drift note; committed, pushed tips get GitHub permalinks
+    - YAML front matter (`kompreni:` with range, commits, files, level, tests) as the starting point for searchable change history
+    - Deep explanations now end by offering the matching walkthrough command
+- `check_refs.py` understands Quarto code blocks (`filename="path:lines"` captions, `.illustrative`, `{mermaid}`, annotation markers), errors on executable `{python}` cells, skips YAML front matter, and checks GitHub permalinks at their commit

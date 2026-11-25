@@ -34,7 +34,7 @@ A short paragraph: purpose, before and after, why (labelled if it isn't obvious)
 
 ## Deep
 
-Standard, plus a small ASCII flow in "How the pieces fit together" when it clarifies an interaction. End with one line saying a structured walkthrough could be worth writing for a change this size. Don't offer to generate one yet; that feature doesn't exist.
+Standard, plus a small ASCII flow in "How the pieces fit together" when it clarifies an interaction. Before the snapshot line, add one line offering a persistent walkthrough document for a change this size, with the command that would write it: `/kompreni:walkthrough` plus the same `branch`/`since`/`commit`, `focus` and `level` arguments. (Its default `scope=all` covers the whole session. Don't pass `scope=new`: this explanation would become its baseline, leaving nothing to cover.) Don't write it unless asked.
 
 ## Evidence labels
 
@@ -69,5 +69,5 @@ Prefer a short excerpt over a long description when the code is the clearest exp
 - Plain prose, grouped under bold or `###` headings at standard and deep depth.
 - Name commit SHAs when there are any.
 - Match tone, analogies and snippet length to the level in `levels.md`.
-- No quizzes or exercises at this layer.
+- No quizzes or exercises at this layer (walkthroughs have them).
 - Don't write any files.

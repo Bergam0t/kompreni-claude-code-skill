@@ -6,7 +6,11 @@ Agent completion summaries tell you what was done. Kompreni helps you build a me
 
 ## Status
 
-**Layer 1 only (v0.1.0):** a Claude Code skill that explains recent changes in the conversation. No files are written. Structured walkthroughs and persistent knowledge are planned but not built; see [HANDOVER-original.md](HANDOVER-original.md).
+**v0.1.0:**
+- Layer 1, `/kompreni:explain`, explains changes in the conversation and writes no files.
+- Layer 2, `/kompreni:walkthrough`, writes a structured Quarto or Markdown walkthrough for changes worth keeping a record of.
+
+Persistent, searchable knowledge (Layer 3) is planned but not built. The walkthroughs' front matter is its starting point. See [HANDOVER-original.md](HANDOVER-original.md).
 
 ## Install
 
@@ -57,6 +61,30 @@ If you don't give a level, Kompreni uses `intermediate`, unless something in thi
 
 In history mode the conversation can't say why something was done, so the explanation draws on commit messages, the pull request (if the GitHub CLI `gh` is available) and the code. Each reason is labelled with its source. If the commit sequence shows an approach that was tried and replaced, or fixes made after review, it adds a short "How it got here". The skill never checks out, stashes or resets anything.
 
+### Walkthroughs: a document worth keeping
+
+For a substantial change, `/kompreni:walkthrough` writes a guided walkthrough to a file instead of the chat. It's for someone reading later, who wasn't in the conversation.
+
+```
+/kompreni:walkthrough
+/kompreni:walkthrough branch=feature-x level=new-to-language
+/kompreni:walkthrough commit=abc1234 format=md
+```
+
+- **Where**: `kompreni/walkthroughs/<date>-<slug>.qmd`, meant to be committed. Change the folder with `out=`.
+- **Format**: Quarto (`.qmd`) if Quarto is installed, otherwise GitHub-flavoured Markdown (`.md`). Force one with `format=qmd|md`.
+- **Rendering**: a `.qmd` is rendered to a single self-contained HTML file next to it, which a `.gitignore` there keeps out of git. If your repo is already a Quarto project, the walkthrough isn't rendered by default, because Quarto would send it into your site's output. Exclude `kompreni/` in your `_quarto.yml` if you don't want walkthroughs on your site.
+- **What's in it**:
+    - the problem, then one concrete example traced through the code before and after the change;
+    - annotated excerpts and before/after tabs;
+    - a diagram, only if the flow changed;
+    - the decisions with their evidence, honest verification, limitations, and a few questions with hidden answers (`quiz=off` to leave them out).
+- **Proportionate**: for a small change it suggests `/kompreni:explain` instead, and asks before writing.
+- **Uncommitted changes** are fine. The walkthrough notes that line references point at the working tree as it was, and may drift. Committing first gives stable references and, on GitHub, permalinks.
+- **Front matter** records the range, commits, files, level and tests (`kompreni:` in the YAML). This is the start of Kompreni's searchable change history.
+
+The skill shares `level=`, `focus=` and history mode with `/kompreni:explain`. It covers the whole conversation by default (`scope=all`).
+
 ### Optional: an Explain row above the prompt
 
 The [`kompreni-offer`](mods/kompreni-offer/) mod shows a row above the prompt whenever Claude isn't working (or, with `/kompreni-offer show=changes`, only after turns that edited files). It counts the files changed since the last explanation, and has depth and level pickers and an **Explain** button that fills in the command for you. It remembers your choices. The skill works fine without it.
@@ -66,7 +94,7 @@ The [`kompreni-offer`](mods/kompreni-offer/) mod shows a row above the prompt wh
 - **Git** supplies what changed (including edits made through shell commands). **The conversation** supplies why.
 - Changes are grouped by purpose, not file, and the depth (brief, standard or deep) is matched to the size of the change.
 - Rationale is labelled *(code)*, *(stated)* or *(inferred)*, so reasons are never invented.
-- Quoted code is copied verbatim with its location, or marked `illustrative`. A small script (`skills/explain/scripts/check_refs.py`, Python 3.9+, standard library only) checks every snippet and `file:line` reference against the repo before the explanation is shown. It can't check that the prose about the code is right.
+- Quoted code is copied verbatim with its location, or marked `illustrative`. A small script (`skills/explain/scripts/check_refs.py`, Python 3.9+, standard library only) checks every snippet and `file:line` reference against the repo before the explanation or walkthrough is shown. It understands both Markdown and Quarto code blocks, and GitHub permalinks. It can't check that the prose about the code is right.
 - Verification reports only tests actually run in the session.
 - Changes in git that the session didn't make (your own uncommitted work) are listed separately.
 

@@ -9,7 +9,7 @@
     {
       "name": "kompreni",
       "source": "./",
-      "description": "Explain what an AI coding agent changed, why, and how the pieces fit together."
+      "description": "Explain what an AI coding agent changed, why, and how the pieces fit together, in the chat or as a persistent Quarto or Markdown walkthrough."
     },
     {
       "name": "kompreni-offer",

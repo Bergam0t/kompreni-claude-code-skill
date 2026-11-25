@@ -88,6 +88,85 @@ class CheckRefsTest(unittest.TestCase):
         code, out = self.run_check(draft, "--ref", "feature")
         self.assertEqual(code, 0, out)
 
+    # Quarto (.qmd) syntax, used by walkthroughs.
+
+    def run_qmd(self, draft, *extra):
+        doc = self.repo / "walkthrough.qmd"
+        doc.write_text(draft, encoding="utf-8", newline="\n")
+        try:
+            p = subprocess.run([sys.executable, str(SCRIPT), "--repo", str(self.repo), "--file", str(doc), *extra],
+                               capture_output=True, text=True)
+        finally:
+            doc.unlink()
+        return p.returncode, p.stdout
+
+    def test_qmd_filename_caption_checked(self):
+        ok = '```{.python filename="src/a.py:1-2"}\ndef f(x):\n    return x + 2\n```\n'
+        code, out = self.run_qmd(ok)
+        self.assertEqual(code, 0, out)
+        self.assertIn("1 verbatim snippet", out)
+        bad = '```{.python filename="src/a.py:1-2"}\ndef f(x):\n    return x + 9\n```\n'
+        code, out = self.run_qmd(bad)
+        self.assertEqual(code, 1)
+        self.assertIn("does not match", out)
+
+    def test_qmd_before_snippet_ref_in_caption(self):
+        draft = '```{.python filename="src/a.py:1-2@HEAD"}\ndef f(x):\n    return x + 1\n```\n'
+        code, out = self.run_qmd(draft)
+        self.assertEqual(code, 0, out)
+
+    def test_qmd_annotation_markers_ignored(self):
+        draft = ('```{.python filename="src/a.py:1-2"}\ndef f(x):          # <1>\n    return x + 2    # <2>\n```\n'
+                 "1. Entry.\n2. The change.\n")
+        code, out = self.run_qmd(draft)
+        self.assertEqual(code, 0, out)
+
+    def test_qmd_illustrative_mermaid_and_text_skipped(self):
+        draft = ('```{.python .illustrative filename="Simplified from src/a.py"}\nf(1)\n```\n\n'
+                 "```{mermaid}\nflowchart LR\n  A --> B\n```\n\n"
+                 "```{.text}\nA -> B\n```\n")
+        code, out = self.run_qmd(draft)
+        self.assertEqual(code, 0, out)
+        self.assertIn("0 warning", out)
+
+    def test_qmd_executable_cell_is_error(self):
+        code, out = self.run_qmd("```{python}\nprint(1)\n```\n")
+        self.assertEqual(code, 1)
+        self.assertIn("executable", out)
+
+    def test_qmd_bare_mermaid_warns_but_md_does_not(self):
+        draft = "```mermaid\nflowchart LR\n  A --> B\n```\n"
+        code, out = self.run_qmd(draft)
+        self.assertEqual(code, 0, out)
+        self.assertIn("{mermaid}", out)
+        code, out = self.run_check(draft)
+        self.assertEqual(code, 0, out)
+        self.assertIn("0 warning", out)
+
+    def test_qmd_unmarked_braced_block_warns(self):
+        code, out = self.run_qmd("```{.python}\nx()\n```\n")
+        self.assertEqual(code, 0, out)
+        self.assertIn("no location", out)
+
+    def test_front_matter_skipped(self):
+        draft = "---\ntitle: \"t\"\nkompreni:\n  files: [src/nope.py:3]\n---\n\nSee `src/a.py:2`.\n"
+        code, out = self.run_qmd(draft)
+        self.assertEqual(code, 0, out)
+        self.assertIn("checked 1 reference", out)
+
+    def test_permalink_checked_at_its_ref(self):
+        good = "See [f](https://github.com/o/r/blob/feature/src/a.py#L9-L10).\n"
+        code, out = self.run_check(good)
+        self.assertEqual(code, 0, out)
+        self.assertIn("checked 1 reference", out)
+        bad = "See [f](https://github.com/o/r/blob/main/src/a.py#L9-L10).\n"
+        self.assertEqual(self.run_check(bad)[0], 1)
+
+    def test_other_urls_ignored(self):
+        code, out = self.run_check("See [docs](https://example.com/guide#L3).\n")
+        self.assertEqual(code, 0, out)
+        self.assertIn("checked 0 reference", out)
+
 
 if __name__ == "__main__":
     unittest.main()

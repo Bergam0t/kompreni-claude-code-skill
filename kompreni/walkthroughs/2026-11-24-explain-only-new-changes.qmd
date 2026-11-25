@@ -1,0 +1,268 @@
+---
+title: "Explaining only what's new since the last explanation"
+date: 2026-11-24
+format:
+  html:
+    embed-resources: true
+    toc: true
+    code-annotations: hover
+kompreni:
+  schema: 1
+  kind: walkthrough
+  summary: "Session-mode explanations now cover only the changes since the previous Kompreni explanation, using git-tree snapshots that also catch shell-made edits; the offer mod counts files across turns until an explanation runs."
+  source: commit
+  base: 23858439baf570c5b6840faf247c40f948d21bdd
+  tip: c561b3abd20f058f3f94dc7ebe75f6781eb74320
+  dirty: false
+  branch: main
+  commits: [c561b3abd20f058f3f94dc7ebe75f6781eb74320]
+  files: [skills/explain/SKILL.md, skills/explain/references/output-guide.md, skills/explain/references/examples.md, skills/explain/scripts/snapshot.py, tests/test_snapshot.py, mods/kompreni-offer/hooks/register.tsx, mods/kompreni-offer/tests/register.test.tsx, mods/kompreni-offer/types/index.d.ts, README.md, mods/kompreni-offer/README.md]
+  level: intermediate
+  depth: deep
+  tests: "tests/test_snapshot.py: 7 passed (run later, on a checkout where snapshot.py and its tests are unchanged since this commit). Mod tests not run at this commit. No PR or CI."
+---
+
+## Overview {#sec-overview}
+
+Before this commit, every `/kompreni:explain` in a conversation explained *everything* that differed from the last commit. Ask for a second explanation after a follow-up change and you got the first change explained all over again. This commit makes a repeat explanation cover only what changed since the previous one. It does that by recording a git snapshot of the working tree at each explanation. The optional `kompreni-offer` mod is changed to match: its count of changed files now runs across turns until an explanation runs.
+
+::: {.callout-note title="At a glance"}
+- **Scope**: commit `c561b3a` on `main` (parent `2385843`). 17 files, +418/−37 lines.
+- **Main files**:
+    - `skills/explain/SKILL.md` (step 2)
+    - `skills/explain/scripts/snapshot.py` (new)
+    - `mods/kompreni-offer/hooks/register.tsx`
+- **Level**: intermediate. **Depth**: deep.
+- **After reading** you should be able to say:
+    - what a Kompreni snapshot is and what it doesn't change;
+    - how a second explanation finds its starting point;
+    - when the mod's count resets.
+:::
+
+## The problem {#sec-problem}
+
+Explanations are often asked for more than once in a session: explain a change, make a follow-up, explain again. Two things went wrong:
+
+- **Repetition.** The second explanation re-covered the first change, because its only baseline was `HEAD` *(code)*.
+- **Missed changes.** If the follow-up was made by a shell command (a `sed`, a code generator), nothing in the conversation's record of edits shows it. Git does see it, but the skill had no way to tell "changed since the last explanation" from "changed since the last commit". The commit message names catching "shell-made ones" as a goal *(commit `c561b3a`)*.
+
+The mod had a matching problem. It only knew about the current turn's edits, so its row said "3 files changed" for the last turn, not for everything still unexplained.
+
+## Before {#sec-before}
+
+A running example, used throughout:
+
+1. **Turn 1.** Claude adds a `--retries` option to `upload.py` with its Edit tool. The user runs `/kompreni:explain`.
+2. **Turn 2.** The user asks for a function to be renamed. Claude does it with one `sed` command over `upload.py` and `cli.py`. The user runs `/kompreni:explain` again.
+
+Nothing is committed in between. (This is an illustrative scenario, not a file in this repo.)
+
+Before this commit, step 2 of the skill started from the same place every time:
+
+```{.markdown filename="skills/explain/SKILL.md:35@2385843"}
+Run, in one Bash call: `git status --porcelain`, `git diff --stat HEAD`, and `git log --oneline -n 10`. Then:
+```
+
+So in turn 2, `git diff --stat HEAD` showed the retries option *and* the rename, and the explanation covered both again.
+
+The mod reset its record of edits on every prompt:
+
+```{.typescript filename="mods/kompreni-offer/hooks/register.tsx:65-69@2385843"}
+  on('prompt.submit', async ($, e, next) => {
+    edited = new Set()
+    await update($, pending, () => null)
+    return next(e)
+  }).catch(($, e, next) => next(e)) // never block a prompt over a failed offer
+```
+
+So after turn 2, which edited nothing through Edit or Write, there was no offer at all. After turn 1, the count covered only turn 1.
+
+## What changed {#sec-what-changed}
+
+### Snapshots of the working tree
+
+A new script, `skills/explain/scripts/snapshot.py`, records the whole working tree as a git *tree object* and prints `tree=<sha> head=<sha>`. The working tree, the real index, branches and the stash are untouched *(code)*. See the docstring at `skills/explain/scripts/snapshot.py:8-12`. Two snapshots can then be compared with an ordinary `git diff <tree1> <tree2>`. That diff includes untracked files and edits made by any means. `tests/test_snapshot.py` covers:
+
+- diffs that include untracked and deleted files;
+- ignored files being left out;
+- nothing in the repo changing;
+- a repo with no commits;
+- large untracked files being skipped.
+
+### Explanations that start where the last one stopped
+
+The skill now takes a snapshot first, then looks back in the conversation for the previous `Kompreni snapshot:` line:
+
+::: {.panel-tabset group="before-after"}
+### Before
+```{.markdown filename="skills/explain/SKILL.md:35@2385843"}
+Run, in one Bash call: `git status --porcelain`, `git diff --stat HEAD`, and `git log --oneline -n 10`. Then:
+```
+
+### After
+```{.markdown filename="skills/explain/SKILL.md:38-43"}
+**Find the baseline.** Look back in this conversation for the most recent line `Kompreni snapshot: tree=<sha> head=<sha>` from an earlier session-mode explanation.
+
+- **`scope=new` and there is one**: explain only what changed since then.
+  - Run `git diff --stat <old tree> <new tree>` and read diffs the same way (`git diff <old tree> <new tree> -- <path>`). This includes untracked files and shell-made changes.
+  - Run `git log --oneline <old head>..HEAD` for commits made in between.
+  - Before relying on the old snapshot, check it still exists (`git cat-file -e <old tree>`). If it doesn't, use this conversation's record of edits since that explanation, and say so.
+```
+:::
+
+A new `scope` argument chooses between the two behaviours:
+
+- `new` (the default) covers changes since the last explanation;
+- `all` gives one consolidated explanation of the whole conversation (`skills/explain/SKILL.md:26`).
+
+Every session-mode explanation now ends with the snapshot line, even a brief one. That way the next explanation can find it (`skills/explain/SKILL.md:54`, and item 11 of the output guide).
+
+### A mod count that spans turns
+
+The mod's per-turn `pending` offer is replaced by three pieces of session state:
+
+- `sinceExplain`: the files edited since the last explanation;
+- `isVisible`: whether the row is shown;
+- `hasExplained`: whether an explanation has run yet.
+
+All three are declared at `mods/kompreni-offer/hooks/register.tsx:5-7`. Edits are added to `sinceExplain` as they happen. A small per-turn counter, `turnEdits`, still decides whether *this* turn earns a row (`mods/kompreni-offer/hooks/register.tsx:70`). `mods/kompreni-offer/tests/register.test.tsx` gains tests for each of these cases:
+
+- counts accumulating across turns;
+- a typed command resetting the count;
+- Claude invoking the skill resetting the count;
+- a history-mode run not resetting the count;
+- filling in the command without running it keeping the count.
+
+**Housekeeping**:
+
+- README and mod README sections;
+- a worked second-explanation example in `skills/explain/references/examples.md`;
+- eval scenarios 18-21;
+- HISTORY and HANDOVER entries;
+- the mod's type declarations updated for the new state.
+
+## How it works now {#sec-how-it-works-now}
+
+Back to the running example.
+
+**Turn 1.** The skill runs `snapshot.py`, which prints, say, `tree=T1 head=H`. There's no earlier snapshot line in the conversation, so this is a whole-conversation explanation, as before. It ends with `Kompreni snapshot: tree=T1 head=H`.
+
+**Turn 2.** The `sed` command changes `upload.py` and `cli.py`. The skill snapshots again (`tree=T2 head=H`), finds the `T1` line, checks `T1` still exists with `git cat-file -e`, and runs `git diff --stat T1 T2`. That diff lists only the rename in `upload.py` and `cli.py`; the retries option is identical in both trees, so it doesn't appear. The explanation opens by saying it covers changes since the last one, explains the rename, and says how it touches the retries code. It ends with a line for `T2`.
+
+The snapshot itself works by giving git a throwaway index:
+
+```{.python filename="skills/explain/scripts/snapshot.py:51-57"}
+        index = os.path.join(tmp_dir, "index")                                 # <1>
+        real_index = os.path.join(git_dir, "index")
+        if os.path.exists(real_index):
+            shutil.copyfile(real_index, index)  # reuses git's file-stat cache: fast  # <2>
+        env = {**os.environ, "GIT_INDEX_FILE": index}                          # <3>
+
+        git(top, "add", "-u", env=env)  # tracked: modified and deleted       # <4>
+```
+1. The temporary index lives in a temp folder outside the repository, and is deleted afterwards (line 76).
+2. Starting from a copy of the real index lets git skip re-hashing files whose timestamps haven't changed.
+3. `GIT_INDEX_FILE` points every following git command at the copy, so the real index, and with it the user's staged changes, is never touched.
+4. Tracked files are staged into the copy. Untracked, non-ignored files are added next (lines 58-70), apart from any over the size limit. Then `git write-tree` stores the result and returns its SHA (line 71).
+
+The tree object is written into `.git`, but nothing refers to it: no branch, tag or stash entry. That's why the README describes its only side effect as unreferenced objects that git cleans up in time.
+
+In the mod, the turn-1 Edit adds `upload.py` to `sinceExplain`. When the user's `/kompreni:explain` is submitted, `prompt.submit` sees a session-mode explain command and clears the list:
+
+```{.typescript filename="mods/kompreni-offer/hooks/register.tsx:61-65"}
+async function markExplained($: EngineInterface): Promise<void> {
+  await update($, sinceExplain, () => [])
+  await update($, isVisible, () => false)
+  await update($, hasExplained, () => true)
+}
+```
+
+The same reset happens when Claude invokes the skill itself through the Skill tool (`mods/kompreni-offer/hooks/register.tsx:100-101`). That way the count matches what the skill will explain, whichever route started it. Turn 2 made no Edit or Write calls, so `turnEdits` stays 0 and no row appears. See @sec-limitations.
+
+## How the pieces fit together {#sec-fit}
+
+```{mermaid}
+%%| label: fig-two-explanations
+%%| fig-cap: "Two explanations in one conversation, after this commit"
+sequenceDiagram
+  participant U as User
+  participant S as Explain skill
+  participant G as Git
+  U->>S: /kompreni:explain
+  S->>G: snapshot.py
+  G-->>S: tree=T1 head=H
+  S-->>U: explanation, ends with snapshot line T1
+  Note over U,G: rename made with sed in Bash
+  U->>S: /kompreni:explain
+  S->>G: snapshot.py
+  G-->>S: tree=T2 head=H
+  S->>G: git diff T1 T2
+  G-->>S: only the rename
+  S-->>U: explanation of the rename, ends with line T2
+```
+
+The pieces only talk to each other through text and git, as @fig-two-explanations shows:
+
+- **The snapshot line in the conversation is the only link between explanations.** The skill keeps no state file. The previous baseline is whatever line it can find when it looks back in the conversation.
+- **Git does the comparing.** The skill never works out differences itself. It asks git to diff two trees, which is why shell-made edits are included.
+- **The mod and the skill are independent.** The mod never reads snapshots. It infers that an explanation ran by watching for the command or the Skill tool call. Its count is an estimate of what the skill will cover, based on Edit and Write events. The skill's own view, from git, is authoritative.
+
+## Decisions and alternatives {#sec-decisions}
+
+- **The baseline lives in the conversation, not in a file.** This follows the skill's rule of creating no files: the only exception is objects in `.git` (`skills/explain/SKILL.md:9`) *(code)*. It means a new conversation always starts fresh, which matches "since the last explanation *in this conversation*" *(inferred)*.
+- **A temporary index rather than `git stash create`.** The commit message stresses that the stash and index are untouched *(commit `c561b3a`)*. `git stash create` doesn't include untracked files by default, and a new file is one of the commonest changes an agent makes. That's probably why a full tree via a temporary index was chosen *(inferred)*.
+- **Large untracked files are left out** (over 5 MB by default), "so large data files aren't copied into `.git`" (`skills/explain/scripts/snapshot.py:14-15`) *(code)*.
+- **`scope=new` is the default.** The commit message presents it as the session-mode default *(commit `c561b3a`)*. `scope=all` remains for one consolidated explanation, for example before committing. The README gives that example.
+- **The mod resets when the explanation runs, not when the command is filled in.** Filling in the command without sending it leaves the count alone. There's a test for that case *(code)*, presumably so that an abandoned prompt doesn't hide unexplained work *(inferred)*.
+
+## Verification {#sec-verification}
+
+- **Snapshot script**: `tests/test_snapshot.py` was added with 7 tests. They were run later in this repository, on a checkout where `snapshot.py` and its tests are unchanged since `c561b3a`: **7 passed**.
+- **Mod**: tests were added and updated in `mods/kompreni-offer/tests/register.test.tsx`. They were not run for this walkthrough. `register.tsx` has changed since this commit, so a run today wouldn't test this version.
+- **Skill behaviour**: eval scenarios 18-21 describe the end-to-end checks. As of this walkthrough they have not been run.
+- No pull request was found, so there are no CI results.
+
+## Limitations and knock-on effects {#sec-limitations}
+
+- **The mod still can't see shell-made changes.** In the running example, turn 2 shows no row, even though the skill would explain the rename. Its README states this limitation.
+- **Compaction can lose the snapshot line.** If the conversation is summarised and the last `Kompreni snapshot:` line is dropped, the next explanation finds no baseline and covers the whole conversation again. That's safe, but repetitive *(inferred)*.
+- **Garbage collection.** Snapshot trees are unreferenced. If git prunes one before the next explanation, the `git cat-file -e` check fails, and the skill falls back to the conversation's record of edits, which misses shell-made changes.
+- **What snapshots don't see**: ignored files, and untracked files over the size limit. The skill is told to mention skipped large files.
+- **History-mode runs don't reset the mod's count**, because they explain commits, not this session's edits (`mods/kompreni-offer/hooks/register.tsx:22`).
+
+::: {.callout-warning title="If you change the snapshot line's format"}
+The skill searches the conversation for the exact form `Kompreni snapshot: tree=<sha> head=<sha>`. Any change to that line has to be made in both the place that writes it and the place that reads it: SKILL.md step 2 and output-guide.md item 11.
+:::
+
+## Check your understanding {#sec-check}
+
+**1. In the running example, suppose `T1` had been garbage-collected before turn 2. What would the second explanation do, and what would it miss?**
+
+::: {.callout-note collapse="true" title="Answer"}
+`git cat-file -e T1` fails, so it falls back to the conversation's record of edits since the first explanation, and says so. The rename was made with `sed`, not the Edit tool, so that record could miss it. See @sec-limitations.
+:::
+
+**2. Why does `snapshot.py` set `GIT_INDEX_FILE` instead of running `git add` normally?**
+
+::: {.callout-note collapse="true" title="Answer"}
+A normal `git add` would change the user's real index, which holds their staged changes. Pointing git at a temporary copy lets the script stage everything and write a tree without touching the real index. See annotation 3 in @sec-how-it-works-now.
+:::
+
+**3. Mid-session, a user runs `/kompreni:explain commit=abc1234`. Does the mod's file count reset?**
+
+::: {.callout-note collapse="true" title="Answer"}
+No. The `commit=` argument matches the history-mode pattern, so it isn't treated as a session explanation, and the list of files since the last explanation is kept. See @sec-limitations.
+:::
+
+## Worth remembering {#sec-remember}
+
+- A Kompreni snapshot is a git tree, written without touching your files, index, branches or stash. Comparing two of them with `git diff` is the source of truth for "what changed since".
+- The baseline for "since the last explanation" is the last `Kompreni snapshot:` line in the conversation. No line means everything.
+- The mod's count is an estimate from Edit and Write events. The skill's answer, from git, is what counts.
+
+## Scope and provenance {#sec-scope}
+
+- **Range**: `c561b3a` against its first parent `2385843`, so one commit and 17 files.
+- **References**: all line references are to `c561b3a`, except those marked `@2385843`.
+- **Rationale**: from the commit message and the code. No pull request was found (`gh pr list --search c561b3a` returned none), and the commit isn't on the remote, so references carry no permalinks.
+- **Written in** history mode (`/kompreni:walkthrough commit=c561b3a`).

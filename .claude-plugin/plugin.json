@@ -2,11 +2,11 @@
   "name": "kompreni",
   "displayName": "Kompreni",
   "version": "0.1.0",
-  "description": "Understand what an AI coding agent changed, why it changed, and how it fits into your codebase. Provides a conversational explanation that goes beyond the standard completion summary.",
+  "description": "Understand what an AI coding agent changed, why it changed, and how it fits into your codebase. Provides a conversational explanation that goes beyond the standard completion summary, and structured Quarto or Markdown walkthroughs for changes worth keeping a record of.",
   "author": {
     "name": "Sammi Rosser",
     "url": "https://github.com/Bergam0t"
   },
   "license": "MIT",
-  "keywords": ["explanation", "code-review", "changes", "understanding", "codebase"]
+  "keywords": ["explanation", "code-review", "changes", "understanding", "codebase", "quarto", "walkthrough"]
 }
