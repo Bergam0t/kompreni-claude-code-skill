@@ -10,7 +10,7 @@ Tracks [HANDOVER-original.md](HANDOVER-original.md): what has and hasn't been ac
 - [x] §7 Evidence-based / provenance: snippet rules plus `scripts/check_refs.py` (checks references and verbatim snippets; tested on a scratch repo only)
 - [x] History mode: `branch=`, `since=`, `commit=` (`references/history-mode.md`). This answers §10 Q4 in part: what can be reconstructed afterwards from git and PRs, as groundwork for Layer 3
 - [x] Unit tests for `check_refs.py` (`tests/`)
-- [x] Repeated explanations: `scope=new|all`, with git-tree snapshots (`scripts/snapshot.py`, tested) so each explanation covers only what's new. Partly answers §10 Q1 (a complete, reliable account of changes): snapshots catch shell-made changes that edit events miss
+- [x] Repeated explanations: `scope=new|all`, with git-tree snapshots (`scripts/snapshot.py`, tested) so each explanation covers only what's new. Partly answers §10 Q1 (a complete, reliable account of changes): snapshots catch shell-made changes that edit events miss. Fixed: the index copy lost its mtime, so on Git for Windows (which compares mtimes to the second) a same-size edit in the same second could be left out; there is now a deterministic test for it
 - [x] §7 Support learning and retention: prior-knowledge levels (`references/levels.md`) and a "Concepts used here" section
 - [x] §9 Phase 1 scaffolding: skill, examples, eval scenarios
 

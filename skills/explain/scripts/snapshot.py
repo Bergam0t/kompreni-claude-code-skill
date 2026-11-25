@@ -51,7 +51,11 @@ def main():
         index = os.path.join(tmp_dir, "index")
         real_index = os.path.join(git_dir, "index")
         if os.path.exists(real_index):
-            shutil.copyfile(real_index, index)  # reuses git's file-stat cache: fast
+            # Reuses git's file-stat cache, which is fast. copy2 keeps the index's
+            # mtime: git re-reads files modified in the same second as the index
+            # ("racy git"), and a fresh mtime would hide same-size edits made in
+            # that second.
+            shutil.copy2(real_index, index)
         env = {**os.environ, "GIT_INDEX_FILE": index}
 
         git(top, "add", "-u", env=env)  # tracked: modified and deleted

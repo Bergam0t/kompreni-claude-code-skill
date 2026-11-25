@@ -1,5 +1,6 @@
 """Tests for skills/explain/scripts/snapshot.py. Run: python -m unittest discover tests"""
 import hashlib
+import os
 import shutil
 import subprocess
 import sys
@@ -51,6 +52,20 @@ class SnapshotTest(unittest.TestCase):
         self.assertIn("M\ta.py", changed)
         self.assertIn("A\tnew.py", changed)
         self.assertIn("D\t.gitignore", changed)
+
+    def test_same_second_same_size_edit_is_caught(self):
+        # Git for Windows compares mtimes to the second. A file edited in the same
+        # second as the index was written is "racy": git re-reads it, but only if
+        # the snapshot's index copy keeps the real index's mtime.
+        t = 1_700_000_000 * 10**9
+        a, index = self.repo / "a.py", self.repo / ".git" / "index"
+        os.utime(a, ns=(t + 100_000_000,) * 2)
+        git(self.repo, "add", "a.py")  # records the new mtime in the index
+        os.utime(index, ns=(t + 200_000_000,) * 2)
+        a.write_text("two\n")  # same size as "one\n"
+        os.utime(a, ns=(t + 500_000_000,) * 2)
+        _, line, _ = snapshot(self.repo)
+        self.assertIn("M\ta.py", git(self.repo, "diff", "--name-status", "HEAD", parse(line)["tree"]))
 
     def test_ignored_files_left_out(self):
         (self.repo / "ignored.txt").write_text("secret\n")
