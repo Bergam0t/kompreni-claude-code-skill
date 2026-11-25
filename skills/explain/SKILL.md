@@ -65,11 +65,11 @@ Group by behaviour or capability, not by file. Tests go with the code they test.
 
 ## 5. Pick the depth and write
 
-Read `references/output-guide.md` for the depth rules, the section structure, the evidence labels and the style limits. Read `references/levels.md` for the reader's level, which sets how much language and library background to explain. `references/examples.md` has illustrative examples of each depth and of a `new-to-language` explanation.
+Read `references/output-guide.md` for the depth rules, the section structure, the evidence labels and the style limits. Read `references/levels.md` for the reader's level, which sets how much language and library background to explain. Read `references/useful-elsewhere.md` for the "Useful elsewhere" section: lessons from this change that hold outside it, and the test an item must pass. `references/examples.md` has illustrative examples of each depth and of a `new-to-language` explanation.
 
 Non-negotiable rules:
 
-- **Label rationale by evidence**: *(code)* the diff or code shows it, *(stated)* it was said in this conversation, *(inferred)* your reasoning. Never invent motives or history.
+- **Label rationale by evidence**: *(code)* the diff or code shows it, *(stated)* it was said in this conversation, *(observed)* it was seen happen in this session (an error, a test result), *(inferred)* your reasoning. Never invent motives or history.
 - **Verification is honest.** Report only tests actually run in this conversation, with their real results. Name untested parts as gaps.
 - **Be proportionate.** A small fix gets a short explanation. Don't pad.
 - **Quote real code only.** Short excerpts, copied exactly from the diff or the file, each tagged with its location. Anything simplified or invented is marked `illustrative`. See the snippet rules in `references/output-guide.md`.

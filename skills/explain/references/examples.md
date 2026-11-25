@@ -82,6 +82,10 @@ These describe an invented small Python project. They show shape and tone, not r
 >
 > **Verification.** `test_retry.py` was added (6 tests). The CI checks on PR #41 passed. No test covers `upload()` itself with a failing network.
 >
+> **Useful elsewhere**
+> - **Pattern: decide what is retryable before retrying.** Retrying every error turns a permanent failure (a 403, a missing bucket) into a slow one. A small `is_retryable` check, with timeouts and 5xx retried and 4xx final, fits any client of a network service *(PR #41)*.
+> - **Pattern: jitter on backoff.** Without random jitter, clients that failed together retry together and overload the service again ("thundering herd") *(commit `c02e5f9`)*.
+>
 > **Scope.** Merge-base `e81d3b2`; changes merged in from `main` are excluded. Uncommitted work in the current checkout isn't included.
 
 ## Level `"fluent in R, new to Python"` (abridged)
@@ -99,7 +103,10 @@ These describe an invented small Python project. They show shape and tone, not r
 > - *Cached loading.* `load_table(path)` is wrapped in `@lru_cache(maxsize=8)`, so the eight most recently used files stay in memory *(code)*.
 > - ...
 >
-> **Worth remembering.** The cache holds the *same* data frame object for every caller. If any caller modifies it in place (as `df["x"] = ...` does, much like R's `data.table` `:=` and unlike ordinary R assignment, which copies), every later caller sees the modified version.
+> **Worth remembering.** The cache holds the *same* data frame object for every caller. If any caller modifies it in place (as `df["x"] = ...` does, much like R's `data.table` `:=` and unlike ordinary R assignment, which copies), every later caller sees the modified version. So code that uses `load_table` must copy before changing anything (`df = load_table(p).copy()`).
+>
+> **Useful elsewhere**
+> - **Gotcha: Python caches share objects.** `lru_cache` (and memoising in general, in Python) returns the very object it stored, not a copy. Anything mutable it returns, such as a data frame, list or dict, is shared by every caller *(code: [data.py:8](src/data.py#L8))*. In R, `memoise` gets away with this because R copies on modification; in Python you have to copy yourself or treat cached results as read-only.
 
 ## A second explanation in the same conversation (`scope=new`, abridged)
 

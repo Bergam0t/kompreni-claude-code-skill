@@ -29,12 +29,13 @@ In this order. Omit any that would be empty. Section headings are `##`, with an 
 | 9 | **Verification** | Tests added or changed, tests actually run and their results (or CI results in history mode), and the untested parts named as gaps. If nothing was run, say "Nothing was run." |
 | 10 | **Limitations and knock-on effects** | What could break, assumptions, anything now inconsistent elsewhere, follow-up work |
 | 11 | **Check your understanding** | See below. Left out with `quiz=off` |
-| 12 | **Worth remembering** | Two to four takeaways for the mental model, such as "if you change X, also update Y" |
-| 13 | **Scope and provenance** | The resolved range and what was excluded (history mode's scope note), changes present but not made in this session, the snapshot (session mode), and whether a PR was found |
+| 12 | **Worth remembering** | Two to four takeaways for the mental model of this codebase, such as "if you change X, also update Y" |
+| 13 | **Useful elsewhere** | What this change teaches that holds outside it: library gotchas met here, patterns worth reusing, techniques that worked. Only items that pass the test in `<explain>/references/useful-elsewhere.md`; left out if none do. Link each to the section or stop where it shows up (`@sec-…` in `qmd`). Also listed in the front matter as `kompreni.lessons` |
+| 14 | **Scope and provenance** | The resolved range and what was excluded (history mode's scope note), changes present but not made in this session, the snapshot (session mode), and whether a PR was found |
 
 ### Short walkthroughs (standard-sized changes)
 
-Merge 2 into 1, merge 6 into 5 (trace the example within each group), and fold 7 into 6 unless there is a diagram. Keep 3, 8, 9, 10 and 13. One or two questions in 11.
+Merge 2 into 1, merge 6 into 5 (trace the example within each group), and fold 7 into 6 unless there is a diagram. Keep 3, 8, 9, 10, 13 (if anything qualifies) and 14. One or two questions in 11.
 
 ## Length
 

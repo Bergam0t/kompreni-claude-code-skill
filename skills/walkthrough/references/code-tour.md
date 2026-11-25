@@ -17,6 +17,7 @@ Keep these sections from `structure.md`:
 - Limitations
 - Check your understanding
 - Worth remembering
+- Useful elsewhere: link each item to its tour stop (`@sec-tour-…`). An annotation on the lines where a gotcha bites can point to it in a few words ("a Git for Windows quirk: see @sec-useful-elsewhere")
 - Scope and provenance
 
 Replace "What changed" and "How it works now" with a **Code tour** section (`## Code tour {#sec-tour}`).
@@ -64,7 +65,7 @@ The syntax is in `formats.md`, "Code annotations". Rules for a tour:
 - **Every changed line of code carries a marker.** Consecutive lines that do one thing share a number: repeat the same `# <n>` on each of them, which highlights them together. Unchanged context lines carry a marker only when the explanation needs them. Changed comments and docstrings that speak for themselves can go unmarked, or share one marker on their first line. Blank lines never carry one.
 - **Marker syntax by language**: `# <n>` (Python, R, shell, YAML, TOML), `// <n>` (JS, TS, JSON, C-family, Rust, Go), `-- <n>` (SQL, Lua), `<!-- <n> -->` (Markdown, HTML), `/* <n> */` (CSS). All of these were tested.
 - **Numbering restarts at 1 in each block.** So refer to other stops by section (`@sec-tour-snapshot`), never by annotation number.
-- **Each item says what the lines do and why.** Give the reason with its evidence label where it's a decision: *(code)*, *(stated)*, *(commit `sha`)*, *(PR #n)*, *(inferred)*. Don't restate the code in words ("assigns x to y"); say what it achieves, what it guards against, and what would break without it.
+- **Each item says what the lines do and why.** Give the reason with its evidence label where it's a decision: *(code)*, *(stated)*, *(commit `sha`)*, *(PR #n)*, *(observed)*, *(inferred)*. Don't restate the code in words ("assigns x to y"); say what it achieves, what it guards against, and what would break without it.
 - **One paragraph per item, about one to four sentences.** Quarto silently drops a second paragraph (tested), and the checker reports it as an error. Inline code, emphasis and links are fine.
 - **Start each item with a word**, not something Pandoc reads as a block: a bullet (`- `), a number or letter with a dot (`2. `, `a. `, a bare `A.`), a heading `#` or a quote `>`. Quarto's render then **fails outright** (tested: "Inline expected, got Blocks"). Starting with inline code is fine. The checker flags these. For more detail, add a collapsed callout after the list:
   `::: {.callout-note collapse="true" title="More on annotation 2: why a temporary index"}`.

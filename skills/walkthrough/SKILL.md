@@ -90,10 +90,11 @@ Read these before writing:
 - `references/front-matter.md`: the metadata block at the top.
 - `references/code-tour.md`, **only with `code=all`**: it replaces "What changed" and "How it works now" with an annotated code tour, and changes the front matter.
 - `<explain>/references/levels.md`: how much language background to give.
+- `<explain>/references/useful-elsewhere.md`: the "Useful elsewhere" section.
 - `<explain>/references/output-guide.md`, "Evidence labels" and "Code snippets and references".
 
 Non-negotiable rules, as in explain:
-- **Label rationale by evidence**: *(code)*, *(stated)*, *(commit `sha`)*, *(PR #n)* or *(inferred)*. Never invent motives or history.
+- **Label rationale by evidence**: *(code)*, *(stated)*, *(commit `sha`)*, *(PR #n)*, *(observed)* or *(inferred)*. Never invent motives or history.
 - **Verification is honest.** Report only tests actually run, with their real results. Name untested parts as gaps.
 - **Quote real code only.** Verbatim excerpts carry their location; anything else is marked illustrative.
 - **The document stands alone.** The reader doesn't have this conversation. Never copy the user's chat messages into the document, and never include personal details: it is likely to be committed.

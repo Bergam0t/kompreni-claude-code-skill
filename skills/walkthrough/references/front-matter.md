@@ -27,6 +27,8 @@ kompreni:
   depth: deep
   code: key
   tests: "pytest tests/test_upload.py: 14 passed"
+  lessons:
+    - {kind: pattern, topic: "retries", summary: "Classify errors as retryable before retrying: retrying a 4xx only delays the failure."}
   snapshot: {tree: 8c1e..., head: 51d0a3b7c9de...}
 ---
 ```
@@ -57,6 +59,7 @@ The same, without the `format:` key.
 | `kompreni.depth` | yes | `standard` or `deep` |
 | `kompreni.code` | yes | `key` (key excerpts) or `all` (a code tour; see `code-tour.md`, which also switches `code-annotations` to `below`) |
 | `kompreni.tests` | yes | What was run and the result, in one line, or `"none run"`. In history mode, the CI summary or `"no results available"` |
+| `kompreni.lessons` | if any | One entry per item in "Useful elsewhere", in the same order: `kind` (`gotcha`, `pattern` or `technique`), `topic` (the library, tool or area, such as `"pandas"` or `"git on Windows"`, plus a version when the item depends on it), and `summary` (one sentence that makes sense alone). Leave the key out when the section is left out. These let later tools find a gotcha across all walkthroughs |
 | `kompreni.snapshot` | session mode | `{tree: <sha>, head: <sha>}` from `snapshot.py` |
 | `kompreni.focus` | if given | The `focus=` value |
 

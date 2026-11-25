@@ -49,6 +49,12 @@
     - Errors when `.numberLines` has no `startFrom` matching the caption's first line
     - Recognises `<!-- <n> -->` (Markdown, HTML) and `/* <n> */` (CSS) markers as well as line comments
     - New `--coverage BASE[..TIP]` lists changed lines that no verbatim snippet shows, as notes, ignoring blank lines
+- Add a "Useful elsewhere" section to explanations, walkthroughs and code tours
+    - Lessons from the change that apply beyond it: library gotchas met here, patterns worth reusing, and debugging or testing techniques that worked
+    - Each item must be tied to this change, transferable, non-obvious at the reader's level and accurate; generic advice is excluded, and the section is left out when nothing qualifies
+    - Up to 2 items in a standard explanation, 3 in a deep one, 5 in a full walkthrough; a brief explanation gets at most one sentence
+    - Walkthroughs also list the items in the front matter as `kompreni.lessons`, so they can be searched across walkthroughs later
+    - New evidence label *(observed)* for what was seen happening in the session, such as an error or a test result
 - The `kompreni-offer` mod gains **Walkthrough** and **Code tour** buttons (mod version 0.1.3)
     - They fill in `/kompreni:walkthrough` (with `code=all` for Code tour), with the chosen level, and the depth only if it's `standard` or `deep`; never a scope
     - Shown only when the walkthrough skill is installed, on both the full and the one-line row; never overwrite a draft

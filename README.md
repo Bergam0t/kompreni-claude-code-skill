@@ -34,6 +34,8 @@ You can also just ask, for example "walk me through what you changed". The skill
 
 **Several explanations in one conversation.** Each explanation covers only what changed since the previous one, and says how the new changes interact with the earlier ones. Use `scope=all` for one consolidated explanation of everything the conversation changed, e.g. before committing. To make "since the previous one" reliable, each explanation ends with a line like `Kompreni snapshot: tree=4f2a91c… head=51d0a3b…`. That's a git snapshot of your working tree, taken without changing your files, index, branches or stash. Its only side effect is unreferenced objects inside `.git`, which git cleans up in time. Untracked files over 5 MB are left out of it.
 
+**Lessons that travel.** When a change teaches something beyond itself, a "Useful elsewhere" section says so: a library gotcha the change ran into, a design pattern worth reusing, or a debugging or testing technique that worked. Each item points to where it shows up in this change and is labelled with its evidence. It's left out when there's nothing real to say, which is often.
+
 ### Matching your experience
 
 ```
@@ -79,7 +81,8 @@ For a substantial change, `/kompreni:walkthrough` writes a guided walkthrough to
     - the problem, then one concrete example traced through the code before and after the change;
     - annotated excerpts and before/after tabs;
     - a diagram, only if the flow changed;
-    - the decisions with their evidence, honest verification, limitations, and a few questions with hidden answers (`quiz=off` to leave them out).
+    - the decisions with their evidence, honest verification, limitations, and a few questions with hidden answers (`quiz=off` to leave them out);
+    - "Useful elsewhere", when the change teaches something that applies beyond it (also listed in the front matter, so these lessons can be searched across walkthroughs later).
 - **Code tour** (`code=all`): instead of a few key excerpts, it shows all the substantive changed code, with a little context, in order of the call flow. It uses Quarto code annotations: numbered markers on the lines, with explanations below each block that highlight their lines when clicked. Line numbers match the real files. Test changes are annotated inside collapsed sections, and housekeeping is summarised. A `--coverage` check confirms that every changed line is either shown or listed as not toured. Quarto only.
 - **Proportionate**: for a small change it suggests `/kompreni:explain` instead, and asks before writing.
 - **Uncommitted changes**: Claude asks whether to commit them first, saying what it would commit and with what message. A walkthrough tied to a commit keeps references that can always be checked and, on GitHub, permalinks. Only the session's own changes are committed, and nothing is pushed. If you say no, the walkthrough notes that its line references point at the working tree as it was, and may drift.

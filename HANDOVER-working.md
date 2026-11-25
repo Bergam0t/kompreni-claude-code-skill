@@ -38,6 +38,7 @@ Tracks [HANDOVER-original.md](HANDOVER-original.md): what has and hasn't been ac
     - Dogfood: `kompreni/walkthroughs/2026-11-25-explain-only-new-changes-code-tour.qmd`. 36 annotated blocks; every annotation's highlighted lines were verified against the HTML
 - [x] §9 Phase 4 "allow the user to request a Quarto walkthrough": Walkthrough and Code tour buttons in `kompreni-offer` (mod 0.1.3). A session-mode walkthrough resets the count. Tests pass (`claude plugin test`); **not tried live**, and not type-checked (no `tsc` here, and the API types are only written when Claude Code loads the mod)
 - [x] Uncommitted changes: before writing, the walkthrough asks whether to commit first, with a one-line reason and the files and message it would use. It commits only the session's own changes, never pushes or skips hooks; a "no" gives the existing `dirty: true` walkthrough. Scenarios 26 (no) and 31 (yes), rubric item 20
+- [x] "Useful elsewhere" section in explanations, walkthroughs and code tours (`skills/explain/references/useful-elsewhere.md`): transferable gotchas, patterns and techniques, each grounded in the change, with an item limit and omitted when nothing qualifies. New *(observed)* evidence label. Walkthroughs list the items as `kompreni.lessons` in the front matter. Scenarios 32-33, rubric item 21; not yet run. The two dogfood walkthroughs predate it
 - [ ] Scenarios 22-31 not yet run, in particular by a fresh agent (`claude --plugin-dir .`) with no prior context
 - [ ] Code tours of large changes (the 600-line rule) not yet tried
 - [ ] A code tour's teaching value not yet judged by anyone but its author
@@ -56,7 +57,7 @@ Tracks [HANDOVER-original.md](HANDOVER-original.md): what has and hasn't been ac
 
 ## Deferred
 
-- [ ] §4 Layer 3 persistent knowledge, §9 Phases 3 and 5. The walkthrough front matter is the starting point. Next: an index or listing across `kompreni/walkthroughs/`, and how agents find relevant walkthroughs before changing code
+- [ ] §4 Layer 3 persistent knowledge, §9 Phases 3 and 5. The walkthrough front matter is the starting point, and `kompreni.lessons` is the obvious first thing to index ("gotchas met before with this library"). Next: an index or listing across `kompreni/walkthroughs/`, and how agents find relevant walkthroughs before changing code
 - [ ] Walkthroughs: re-pin a `dirty: true` walkthrough to a SHA after commit; interactive exercises beyond collapsed Q&A
 - [x] §5 / §9 Phase 4 first mod: `mods/kompreni-offer` (an Explain row above the prompt, shown always by default or only after turns with edits via `show=changes`; fills the command). Validated, type-checked and unit-tested; **not yet tried in a live session or in VS Code**
 - [ ] Mods: richer UI (a pane listing changed files, per-file explain), capture of Bash-made changes (e.g. a git snapshot per turn), access to earlier explanations
