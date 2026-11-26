@@ -2,21 +2,13 @@
 
 An optional companion to the `kompreni` skill. It shows a row above the prompt, whenever Claude isn't working:
 
-```
-Kompreni: 3 files changed since the last explanation.
-Scope  [since last explanation                        ▾]
-Depth  [auto (picked from the size of the change)     ▾]
-Level  [new-to-language                               ▾]
-[Explain] [Walkthrough] [Code tour] [Dismiss]
-```
+![The row above the prompt in VS Code: "18 files changed in this conversation", Depth and Level pickers, and Explain, Walkthrough, Code tour and Dismiss buttons](images/row.png)
 
-(The Scope line appears only after the first explanation.)
+(After the first explanation, a Scope picker appears above Depth.)
 
 When there's nothing new to explain, it shrinks to one line, and Explain uses your remembered depth and level:
 
-```
-Kompreni: no file edits seen since the last explanation.  [Explain] [Walkthrough] [Code tour] [Dismiss] [Whole conversation]
-```
+![The one-line form of the row: "no file edits seen in this conversation", with Explain, Walkthrough, Code tour and Dismiss buttons](images/row-one-line.png)
 
 (**Whole conversation** appears only after an explanation, and opens the full row with that scope chosen.)
 
@@ -34,6 +26,10 @@ After the first explanation, a **Scope** picker appears: *since last explanation
 **Walkthrough** and **Code tour** do the same for `/kompreni:walkthrough`, which writes a persistent Quarto or Markdown document instead of answering in the chat. **Code tour** adds `code=all`: every changed line, explained with Quarto code annotations. Both use your level, and your depth only if it's `standard` or `deep` (otherwise the skill sizes the walkthrough itself). They never pass a scope: a walkthrough covers the whole conversation. The two buttons appear only if the walkthrough skill is installed.
 
 The depth and level you pick are remembered across sessions. Each picker's **auto** option says what it does: depth is picked from the size of the change, and level is intermediate unless this conversation, your `CLAUDE.md` or Claude's memory says something about your experience (e.g. "I'm new to Python"). The explanation's first line says which level it used and where that came from.
+
+![The Depth picker open: auto (picked from the size of the change), brief, standard, deep](images/depth-picker.png)
+
+![The Level picker open: auto (intermediate, unless this chat, CLAUDE.md or memory says otherwise), new-to-programming, new-to-language, intermediate, advanced](images/level-picker.png)
 
 ## Requirements
 

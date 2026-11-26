@@ -1,0 +1,715 @@
+---
+title: "A faster simulation: taking pandas out of the hot loops"
+date: 2026-11-26
+format:
+  html:
+    embed-resources: true
+    toc: true
+    grid:
+      sidebar-width: 0px
+      body-width: 1050px
+    code-annotations: below
+    theme:
+      light: flatly
+      dark: darkly
+    respect-user-color-scheme: true
+    include-in-header:
+      text: |
+        <style>
+        body { --mermaid-fg-color--lightest: rgba(128,128,128,.08); --mermaid-fg-color--lighter: #adb5bd; }
+        body.quarto-dark { --mermaid-label-fg-color: #fff; --mermaid-edge-color: #adb5bd; }
+        body.quarto-dark :is(.edgeLabel, .edgeLabel p, .labelBkg) { background-color: var(--mermaid-label-bg-color) !important; }
+        </style>
+        <style>
+        div.sourceCode code > span:is(.kompreni-added, .kompreni-removed, .kompreni-changed) { display: inline-block; min-width: 100%; }
+        div.sourceCode code > span.kompreni-added { background: rgba(46,160,67,.18); }
+        div.sourceCode code > span.kompreni-removed { background: rgba(248,81,73,.18); }
+        div.sourceCode code > span.kompreni-changed { background: rgba(214,162,28,.24); }
+        div.sourceCode code > span:is(.kompreni-added, .kompreni-removed, .kompreni-changed)::after { position: absolute; left: 3em; top: 0; width: 1em; text-align: center; font-weight: bold; }
+        div.sourceCode code > span.kompreni-added::after { content: "+"; color: #2ea043; }
+        div.sourceCode code > span.kompreni-removed::after { content: "−"; color: #e5534b; }
+        div.sourceCode code > span.kompreni-changed::after { content: "~"; color: #c69026; }
+        </style>
+        <script>
+        document.addEventListener("DOMContentLoaded", () => {
+          for (const div of document.querySelectorAll("div.sourceCode:is([data-added], [data-removed], [data-changed])")) {
+            const kinds = {};
+            for (const kind of ["added", "removed", "changed"]) {
+              for (const part of (div.dataset[kind] || "").split(",").filter(p => p.trim())) {
+                const [a, b] = part.split("-").map(Number);
+                for (let n = a; n <= (b || a); n++) kinds[n] = kind;
+              }
+            }
+            for (const span of div.querySelectorAll("code > span[id]")) {
+              const kind = kinds[Number(span.id.split("-").pop())];
+              if (kind) span.classList.add("kompreni-" + kind);
+            }
+          }
+        });
+        </script>
+kompreni:
+  schema: 1
+  kind: walkthrough
+  summary: "The model built and filtered pandas DataFrames for every caller, step and result row; those lookups are now built once as lists, dicts and a Counter, making a 3-day run tens of times faster with byte-identical output."
+  source: session
+  base: 41883084083fd1a1505e23a152d5af869d0b9e84
+  tip: 8a5fc929a44f5136ad4074e3447b5980176eb61c
+  dirty: false
+  branch: add-codebase-tutorial
+  commits: [364702f7d40dc2012c69f9d52b2be8dcb1e25835, f86edd2aaebbf406e13154283f079e3fe65d3824, 8a5fc929a44f5136ad4074e3447b5980176eb61c]
+  files: [hsm.py, transitions.py, caller.py, call_dispositions.py]
+  level: intermediate
+  depth: deep
+  code: all
+  tests: "pytest: 4 passed in 1.83s after every step; old-vs-new comparison on 3 settings the tests don't cover: identical"
+  lessons:
+    - {kind: gotcha, topic: "pandas 1.4", summary: "Growing a DataFrame with pd.concat inside a loop copies every earlier row each time, so the cost grows quadratically; collect dicts in a list and build the frame once."}
+    - {kind: gotcha, topic: "pandas 1.4", summary: "Concatenating rows onto an empty DataFrame decides the output's column order and dtypes (whole numbers become floats such as 1.0), so a faster rewrite must keep that step to keep identical output."}
+    - {kind: pattern, topic: "simulation lookups", summary: "Turn small lookup tables used inside a simulation's hot loop into dicts or lists once at start-up; each pandas filter or query costs far more than a dict lookup."}
+    - {kind: technique, topic: "profiling", summary: "Profile before optimising: the scipy sampling assumed to be slow took about 1% of the run, so the risky change planned for it was dropped."}
+    - {kind: technique, topic: "benchmarking", summary: "Time old and new versions back to back from read-only exports of each commit; timings of the same code varied about threefold between sessions."}
+  snapshot: {tree: 5ea12baebfb585c828acf50209b23eb1e7218a3f, head: 8a5fc929a44f5136ad4074e3447b5980176eb61c}
+  focus: "simulation speed-ups"
+---
+
+## Overview {#sec-overview}
+
+The 111 simulation spent most of its time in pandas, not in the simulation. For every new caller, every step of a patient's journey and every result row, it built or filtered a small DataFrame to look up a value it could have looked up once. Three commits replace those per-event pandas operations with plain Python lists, dicts and a `Counter`, built once when the model starts.
+
+The output is unchanged, byte for byte. A seeded regression test compares every output CSV with saved copies, and it passed after every step. Back to back on the same machine, a 3-day run took 31.3s before and 0.2s after. The app's default 7-day run now takes about 0.3s.
+
+::: {.callout-note title="At a glance"}
+- **Scope**: commits `364702f`, `f86edd2` and `8a5fc92` on branch `add-codebase-tutorial`, on top of `4188308`.
+- **Files**: `hsm.py`, `transitions.py`, `caller.py` and `call_dispositions.py`. No inputs, outputs or settings changed.
+- **Level**: intermediate. This is a full code tour of every changed line.
+- **After reading** you will know where the time went, how each hot path now works, why the output is guaranteed identical, and how to add a lookup without bringing the slowness back.
+:::
+
+## The problem {#sec-problem}
+
+Simulations were slow enough to get in the way. The regression suite, three short simulations, took about 45-50s *(observed)*, and app runs of a week or more took much longer. That made the planned what-if experiments with many runs impractical.
+
+A profile of one short seeded run (about 650 callers) showed where the time went *(observed)*:
+
+- **Result rows: 46% of the run.** Storing them took 6.2s of a 13.4s profiled run, all of it in `pd.concat`.
+- **Arrival rates: 4.3s.** Generating callers, almost all of it three `DataFrame.query()` calls per caller.
+- **Network graph: about 0.7s and more.** A row-by-row `apply` over the network table on every step.
+- **Next destination: 0.7s.** A DataFrame filter on every step.
+- **Sampling wait and activity times with scipy: about 0.1s.** This was the cost expected to matter most, and it barely registered.
+
+The result rows were the worst offender, because their cost grows with the square of the run's length. Each new row rebuilt the whole results table.
+
+## Before {#sec-before}
+
+**Running example.** In the regression test's default case (seed 42, quarterly transitions, base arrivals, no what-if), patient 4 arrives at minute 76.45: 01:16 on Friday 1 January 2021, quarter 1. They are allocated GP surgery `B83054`, get the disposition outcome `contact_12` and no timely GP contact, and their first step goes from the index 111 call (`Index_IUC`) to another 111 contact (`IUC`). The first two rows of `tests/fixtures/regression/qtr_base_no_whatif/all_results.csv` record exactly this.
+
+Before the change, that one arrival and first step took about a dozen pandas operations:
+
+- **Caller set-up:** four masks in `Caller.__init__` (`caller.py:29-36@4188308`).
+- **Arrival rates:** three `.query()` calls.
+- **Next destination:** one transition-table filter.
+- **Network graph:** an `apply` over all 42 network rows.
+- **Result rows:** two `pd.concat` calls, each copying every row stored so far.
+
+```{.python filename="hsm.py:379-386@4188308"}
+    def store_patient_results(self, results: dict) -> None:
+        """
+            Adds a row of data to the Class' `result_df` dataframe
+        """
+
+        df_dictionary = pd.DataFrame([results])
+
+        self.results_df = pd.concat([self.results_df, df_dictionary], ignore_index=True)
+```
+
+## Concepts used here {#sec-concepts}
+
+::: {.callout-tip title="Why the same random choices come out"}
+`random.choices(population, weights=w)` adds up the weights cumulatively, draws one random number, and picks the item whose cumulative band it falls into. Given the same items, in the same order, with the same weights, the same random number picks the same item. So swapping a pandas Series for a plain list of the same values, in the same order, changes nothing about which destination, disposition or surgery is chosen. The rewritten lookups keep CSV row order for this reason (`transitions.py:36-41`).
+:::
+
+::: {.callout-tip title="collections.Counter"}
+A `Counter` is a dict that returns 0 for a missing key, so `counts[key] += 1` works without setting the key up first. It replaces the per-step `apply` (`hsm.py:318`).
+:::
+
+::: {.callout-tip title="The cost of a small pandas operation"}
+Filtering, querying or concatenating a DataFrame is fast per row but has a large fixed cost per call: it builds new index and column objects, checks dtypes and allocates memory. A dict lookup costs a tiny fraction of that. Inside a loop that runs thousands of times, the fixed cost dominates. In the profile above, about 650 callers made about 1,950 `.query()` calls, costing 4.3s.
+:::
+
+## Code tour {#sec-tour}
+
+The tour follows the simulation's own order: building the lookups, a caller arriving, each step of a journey, and finally storing and writing results. Annotations follow patient 4 through the new code. Blocks from files that already existed have a **Before** tab with the matching code at `4188308` and an **After** tab with the current code, and the lines the change touched are tinted: yellow for changed, green for added, red for removed. Each block's tabs switch independently.
+
+### A caller arrives {#sec-tour-arrival}
+
+Everything a new caller needs is now prepared once. Callers' dispositions are prepared when `call_dispositions.py` is imported, and the GP surgeries and arrival rates when the model is built.
+
+::: {.panel-tabset}
+#### Before
+```{.python .numberLines startFrom="30" filename="call_dispositions.py:30-32@4188308"}
+    weekday = ["weekend", "weekday"]
+
+    gp_timely_contact = pd.read_csv("csv/gp_contact_in_timeframe.csv")  # <1>
+```
+1. Only the DataFrames existed. Every new caller filtered `dx_codes` and `gp_timely_contact` directly (next tabs).
+
+#### After
+```{.python .numberLines startFrom="32" added="33-39" filename="call_dispositions.py:32-39"}
+    gp_timely_contact = pd.read_csv("csv/gp_contact_in_timeframe.csv")
+
+    # Plain-Python versions of the tables above, for the lookups done for every new caller
+    dx_list = dx_codes.index.tolist()  # <1>
+    dx_weights = dx_codes["prob"].tolist()  # <1>
+    dx_prob = dx_codes["prob"].to_dict()              # disposition -> probability  # <2>
+    dx_pc_outcome = dx_codes["pc_outcome"].to_dict()  # disposition -> primary care outcome  # <2>
+    gp_timely_prop = dict(zip(gp_timely_contact["pc_outcome"], gp_timely_contact["prop"]))  # pc_outcome -> proportion  # <3>
+```
+1. The dispositions and their weights as lists, in the table's order, for the weighted draw (@sec-concepts).
+2. Disposition → probability, and disposition → outcome. Both replace a boolean mask over the table. Each disposition appears once *(code: the table is defined inline at `call_dispositions.py:18-27`)*.
+3. Outcome → proportion of callers given a timely GP contact. A check confirmed each `pc_outcome` appears once in the CSV *(observed)*, so the dict holds the same value the mask's first match did.
+:::
+
+::: {.panel-tabset}
+#### Before
+```{.python .numberLines startFrom="29" changed="29-31,34,36" filename="caller.py:29-36@4188308"}
+        self.disposition = random.choices(CallDispositions.dx_codes.index, weights=CallDispositions.dx_codes["prob"])[0]  # <1>
+        self.disposition_prob = CallDispositions.dx_codes.prob[CallDispositions.dx_codes.index == self.disposition][0]  # <2>
+        self.pc_outcome = CallDispositions.dx_codes.pc_outcome[CallDispositions.dx_codes.index == self.disposition][0]  # <2>
+        #print(f"PC outcome is {self.pc_outcome}")
+        # Identify the proportion of calls that receieve a timely GP contact
+        prop = CallDispositions.gp_timely_contact.prop[CallDispositions.gp_timely_contact['pc_outcome'] == self.pc_outcome]  # <2>
+        # Get probability value from uniform distribution. If less than prop then timely contact made, otherwise not.
+        self.gp_timely_callback = "yes" if ((random.uniform(0, 1) < list(prop)[0]) | (what_if_sim_run == 'Yes')) else "no"  # <3>
+```
+1. The disposition was drawn over a pandas Index with a Series of weights: the same values, in the same order, as the new lists.
+2. Each value came from a boolean mask over a DataFrame, which built a new filtered Series for every caller.
+3. `prop` was a one-element Series, hence `list(prop)[0]`.
+
+#### After
+```{.python .numberLines startFrom="29" changed="29-31,34,36" filename="caller.py:29-36"}
+        self.disposition = random.choices(CallDispositions.dx_list, weights=CallDispositions.dx_weights)[0]  # <1>
+        self.disposition_prob = CallDispositions.dx_prob[self.disposition]  # <2>
+        self.pc_outcome = CallDispositions.dx_pc_outcome[self.disposition]  # <2>
+        #print(f"PC outcome is {self.pc_outcome}")
+        # Identify the proportion of calls that receieve a timely GP contact
+        prop = CallDispositions.gp_timely_prop[self.pc_outcome]  # <3>
+        # Get probability value from uniform distribution. If less than prop then timely contact made, otherwise not.
+        self.gp_timely_callback = "yes" if ((random.uniform(0, 1) < prop) | (what_if_sim_run == 'Yes')) else "no"  # <4>
+```
+1. The same weighted draw over the same items in the same order, so the same random number gives the same disposition. Patient 4 gets the disposition whose outcome is `contact_12`.
+2. Plain dict lookups. Before, each was a boolean mask over the table followed by `[0]`.
+3. For patient 4, the timely-contact proportion for `contact_12`.
+4. Unchanged logic, but `prop` is now a number rather than a one-element Series, so `list(prop)[0]` is no longer needed. Patient 4 draws "no".
+:::
+
+::: {.panel-tabset}
+#### Before
+```{.python .numberLines startFrom="61" filename="hsm.py:61-61@4188308"}
+        self.GP_surgery_df =  pd.read_csv("csv/gp_surgeries.csv")  # <1>
+```
+1. The surgery draw used this DataFrame's two columns directly, as pandas Series (see the generator tabs).
+
+#### After
+```{.python .numberLines startFrom="62" added="63-65" filename="hsm.py:62-65"}
+        self.GP_surgery_df =  pd.read_csv("csv/gp_surgeries.csv")
+        # Plain lists for the surgery choice made for every new caller
+        self.gp_surgery_ids = self.GP_surgery_df["gp_surgery_id"].tolist()  # <1>
+        self.gp_surgery_weights = self.GP_surgery_df["prob"].tolist()  # <1>
+```
+1. The 74 surgeries and their weights, in CSV order, for the surgery draw at `hsm.py:193`.
+:::
+
+::: {.panel-tabset}
+#### Before
+```{.python .numberLines startFrom="97" filename="hsm.py:97-100@4188308"}
+        self.call_interarrival_times_lu = pd.read_csv("csv/inter_arrival_times.csv")  # <1>
+
+        self.all_results_location = G.all_results_location if what_if_sim_run == 'No' else G.wi_all_results_location
+        self.network_graph_location = G.network_graph_location if what_if_sim_run == 'No' else G.wi_network_graph_location
+```
+1. The table was only stored here. The generator queried it three times per caller, and the start date was re-parsed from a string on every arrival.
+
+#### After
+```{.python .numberLines startFrom="108" added="110-122" filename="hsm.py:108-122"}
+        self.call_interarrival_times_lu = pd.read_csv("csv/inter_arrival_times.csv")
+
+        # The generator looks up these three values for every new caller, so index them
+        # once by (exit_hour, weekday flag, quarter). Each key appears once in the CSV.
+        self.interarrival_lookup = {  # <1>
+            (int(row.exit_hour), int(row.weekday), int(row.qtr)): (  # <1>
+                float(row.mean_inter_arrival_time),  # <2>
+                float(row.max_arrival_rate),  # <2>
+                float(row.min_arrival_rate),  # <2>
+            )  # <1>
+            for row in self.call_interarrival_times_lu.itertuples()  # <1>
+        }  # <1>
+
+        # Parse the start date once, rather than on every call to date_time_of_call
+        self.start_timestamp = pd.to_datetime(sim_start_date)  # <3>
+```
+1. One entry per row of the 192-row table: 24 hours × 2 weekday flags × 4 quarters. A check confirmed no key repeats *(observed)*, so a lookup returns the row `.query()` found. `int()` makes the keys plain Python integers.
+2. The same three values, converted with `float()` just as the old code did.
+3. The start date used to be re-parsed from a string on every arrival. Now it is parsed once, and the parsed timestamp is passed to `date_time_of_call`, which accepts either form. Its signature is unchanged, so `tests/test_hsm.py` still applies.
+:::
+
+::: {.panel-tabset}
+#### Before
+```{.python .numberLines startFrom="161" changed="168,174,189" removed="185-186,190,192-193,195-196" filename="hsm.py:161-196@4188308"}
+            while True:
+                self.patient_counter += 1
+
+                # Create a new caller/patient
+                pt = Caller(self.patient_counter, self.what_if_sim_run)
+
+                # Allocate caller to a GP surgery
+                pt.gp = random.choices(self.GP_surgery_df["gp_surgery_id"], weights=self.GP_surgery_df["prob"])[0]  # <1>
+
+                # Set caller/patient off on their healthcare journey
+                self.env.process(self.patient_journey(pt))
+
+                # Get current day of week and hour of day
+                [dow, hod, weekday, qtr, current_dt] = self.date_time_of_call(self.start_dt, self.env.now)  # <2>
+
+                # Update patient instance with time-based values so the current time is known
+                pt.day = dow
+                pt.hour = hod
+                pt.weekday = weekday
+                pt.qtr = qtr
+
+                # This variable is in use, do not comment out!
+                weekday_bool = 1 if weekday == 'weekday' else 0
+
+                # The interarrival times are recorded in a pandas dataframe.
+
+                # TODO - See if the interarrival times can be improved with machine learning
+
+                # Retrieve mean interarrival time for the specific hour, weekday/weekend and yearly quarter
+                inter_time = float(self.call_interarrival_times_lu.query("exit_hour == @hod & weekday == @weekday_bool & qtr == @qtr")["mean_inter_arrival_time"].tolist()[0])  # <3>
+
+                # Retrieve the maximum interarrival rate for the specific hour, weekday/weekend and yearly quarter
+                max_hourly_interarrival_rate = (60 / (float(self.call_interarrival_times_lu.query("exit_hour == @hod & weekday == @weekday_bool & qtr == @qtr")["max_arrival_rate"].tolist()[0])))  # <3>
+
+                # Retrieve the minimum interarrival rate for the specific hour, weekday/weekend and yearly quarter
+                min_hourly_interarrival_rate = (60 / (float(self.call_interarrival_times_lu.query("exit_hour == @hod & weekday == @weekday_bool & qtr == @qtr")["min_arrival_rate"].tolist()[0]))) - 1  # <3>
+```
+1. The surgery draw used two pandas Series.
+2. The start date was passed as a string, so `date_time_of_call` parsed it on every arrival.
+3. Three `.query()` calls with the same condition for every new caller: most of the generator's 4.3s in the profile.
+
+
+#### After
+```{.python .numberLines startFrom="186" changed="193,199,213" added="212,214,216,218" filename="hsm.py:186-218"}
+            while True:
+                self.patient_counter += 1
+
+                # Create a new caller/patient
+                pt = Caller(self.patient_counter, self.what_if_sim_run)
+
+                # Allocate caller to a GP surgery
+                pt.gp = random.choices(self.gp_surgery_ids, weights=self.gp_surgery_weights)[0]  # <1>
+
+                # Set caller/patient off on their healthcare journey
+                self.env.process(self.patient_journey(pt))
+
+                # Get current day of week and hour of day
+                [dow, hod, weekday, qtr, current_dt] = self.date_time_of_call(self.start_timestamp, self.env.now)  # <2>
+
+                # Update patient instance with time-based values so the current time is known
+                pt.day = dow
+                pt.hour = hod
+                pt.weekday = weekday
+                pt.qtr = qtr
+
+                # This variable is in use, do not comment out!
+                weekday_bool = 1 if weekday == 'weekday' else 0
+
+                # TODO - See if the interarrival times can be improved with machine learning
+
+                # Retrieve the mean interarrival time and the maximum and minimum arrival rates
+                # for the specific hour, weekday/weekend and yearly quarter
+                inter_time, max_arrival_rate, min_arrival_rate = self.interarrival_lookup[(hod, weekday_bool, qtr)]  # <3>
+
+                max_hourly_interarrival_rate = 60 / max_arrival_rate  # <4>
+
+                min_hourly_interarrival_rate = (60 / min_arrival_rate) - 1  # <4>
+```
+1. The same weighted draw over plain lists. Patient 4 is allocated `B83054`.
+2. Passes the already-parsed start timestamp.
+3. One dict lookup replaces three queries. For patient 4 the key is `(1, 1, 1)`: 01:00, a weekday, quarter 1.
+4. The same arithmetic as before, without the repeated `float(...tolist()[0])` wrapping.
+:::
+
+### Each step of a journey {#sec-tour-step}
+
+Every step chooses where the patient goes next and counts the move for the network graph. The destination lists are built once per run, in `Transitions.__init__`.
+
+::: {.panel-tabset}
+#### Before
+```{.python .numberLines startFrom="29" filename="transitions.py:29-32@4188308"}
+        # Early (and terrible) attempt at using a decision tree model
+        self.dt_model =  pickle.load(open('csv/decision_tree_model.sav', 'rb'))
+
+        self.avoidable_ed_admission_df = pd.read_csv(G.avoidable_admission_by_PC_outcome_GP_contact)  # <1>
+```
+1. No grouping or indexing: `next_destination` filtered `transition_probs_df`, and `avoidable_ed_admission` filtered this DataFrame, on every call.
+
+#### After
+```{.python .numberLines startFrom="32" added="32-42,44-48" filename="transitions.py:32-48"}
+        # next_destination runs at every patient step, so group the transition table once:
+        # key -> (destinations, weights if timely GP contact, weights if not), in CSV order.
+        # The key is (step, quarter) for quarterly transitions, otherwise just the step.
+        self.destinations = {}  # <1>
+        for row in self.transition_probs_df.itertuples():  # <2>
+            key = (row.SourceName, int(row.quarter)) if transition_type == 'qtr' else row.SourceName  # <2>
+            targets, weights_gp_yes, weights_gp_no = self.destinations.setdefault(key, ([], [], []))  # <3>
+            targets.append(row.TargetName)  # <3>
+            weights_gp_yes.append(row.ProbGPYes)  # <3>
+            weights_gp_no.append(row.ProbGPNo)  # <3>
+
+        self.avoidable_ed_admission_df = pd.read_csv(G.avoidable_admission_by_PC_outcome_GP_contact)
+        # (pc_outcome, timely GP contact "yes"/"no") -> probability an ED attendance is avoidable
+        self.avoidable_prob = {  # <4>
+            (row.pc_outcome, row.gp_con_time): row.avoid_att  # <4>
+            for row in self.avoidable_ed_admission_df.itertuples()  # <4>
+        }  # <4>
+```
+1. One entry per place a patient can be, holding three lists that line up: the possible next places, their weights with a timely GP contact, and their weights without.
+2. The key matches the old filter: (step, quarter) for quarterly transitions, or just the step for the no-quarter table. The quarterly table's 'quarter' column exists only in that file, so it is read only in that case.
+3. `setdefault` creates the three empty lists the first time a key is seen, then appends. Rows are visited in CSV order, which is the order the old boolean filter returned, so each list matches what the old code passed to `random.choices` (@sec-concepts).
+4. (outcome, `"yes"`/`"no"`) → probability that an ED attendance is avoidable. The CSV's `gp_con_time` column holds the same `"yes"`/`"no"` strings the code passes in, and no pair repeats *(observed)*.
+:::
+
+::: {.panel-tabset}
+#### Before
+```{.python .numberLines startFrom="56" changed="57-58,66,70" removed="59-63,69" filename="transitions.py:56-70@4188308"}
+        # User defined option to use transition probabilities that were calculated taking
+        # yearly quarter into account.
+        if self.transition_type == 'qtr':
+            df = self.transition_probs_df[(self.transition_probs_df.SourceName == current_step) & (self.transition_probs_df.quarter == quarter)]  # <1>
+        else:
+            # Ignore yearly quarter adjustment
+            df = self.transition_probs_df[(self.transition_probs_df.SourceName == current_step)]  # <1>
+
+        # There are separate transition probabilities for cases where a timely GP contact was
+        # made after the index 111 call
+        weights = df.ProbGPYes if gp_timely_contact == "yes" else df.ProbGPNo
+
+        # Randomly sample a destination from the transition probabilities
+        # End as current step should not trigger this function but just in case.
+        return "End" if current_step == "End" else random.choices(df.TargetName.tolist(), weights=weights.tolist())[0]
+```
+1. A fresh filtered DataFrame on every step, even for `End`, where the result was then thrown away.
+
+#### After
+```{.python .numberLines startFrom="72" changed="77-78,83,86" added="72-75,79-80" filename="transitions.py:72-86"}
+        # End as current step should not trigger this function but just in case.
+        if current_step == "End":  # <1>
+            return "End"  # <1>
+
+        # User defined option to use transition probabilities that were calculated taking
+        # yearly quarter into account (otherwise the quarter is ignored).
+        key = (current_step, quarter) if self.transition_type == 'qtr' else current_step  # <2>
+        targets, weights_gp_yes, weights_gp_no = self.destinations[key]  # <2>
+
+        # There are separate transition probabilities for cases where a timely GP contact was
+        # made after the index 111 call
+        weights = weights_gp_yes if gp_timely_contact == "yes" else weights_gp_no  # <3>
+
+        # Randomly sample a destination from the transition probabilities
+        return random.choices(targets, weights=weights)[0]  # <4>
+```
+1. The `End` guard moves to the top, so `End` never needs a lookup. `End` has no row of its own in the table, so the lookup would fail for it.
+2. For patient 4's first step the key is `('Index_IUC', 1)`.
+3. Patient 4 had no timely GP contact, so the "no" weights are used.
+4. The same draw over the same lists as before. Patient 4 goes to `IUC`, as recorded in the saved output.
+:::
+
+::: {.panel-tabset}
+#### Before
+```{.python .numberLines startFrom="177" changed="179" removed="177" filename="transitions.py:177-179@4188308"}
+        aa_prob = self.avoidable_ed_admission_df[(self.avoidable_ed_admission_df['pc_outcome'] == pc_outcome) & (self.avoidable_ed_admission_df['gp_con_time'] == timely_gp_response)]['avoid_att']  # <1>
+
+        return True if random.uniform(0, 1) < list(aa_prob)[0] else False  # <2>
+```
+1. A two-condition DataFrame filter on every ED visit.
+2. The filter returned a one-element Series, hence `list(aa_prob)[0]`.
+
+#### After
+```{.python .numberLines startFrom="193" changed="195" added="193" filename="transitions.py:193-195"}
+        aa_prob = self.avoidable_prob[(pc_outcome, timely_gp_response)]  # <1>
+
+        return True if random.uniform(0, 1) < aa_prob else False  # <2>
+```
+1. Used when a patient goes to ED. One lookup replaces a two-condition filter.
+2. Unchanged comparison, without `list(aa_prob)[0]`.
+:::
+
+::: {.panel-tabset}
+#### Before
+```{.python .numberLines startFrom="7" filename="hsm.py:7-9@4188308"}
+from math import floor
+from itertools import product
+import sys
+```
+
+#### After
+```{.python .numberLines startFrom="7" added="9" filename="hsm.py:7-10"}
+from math import floor
+from itertools import product
+from collections import Counter  # <1>
+import sys
+```
+1. For the transition counts below.
+:::
+
+::: {.panel-tabset}
+#### Before
+```{.python .numberLines startFrom="82" filename="hsm.py:82-83@4188308"}
+        # Create a data frame to capture data to create a network diagram with cytoscape
+        self.network_df                 = self.create_network_df(run_number)  # <1>
+```
+1. The table's weights were updated in place on every step (see the network graph tabs below).
+
+#### After
+```{.python .numberLines startFrom="90" added="92-94" filename="hsm.py:90-94"}
+        # Create a data frame to capture data to create a network diagram with cytoscape
+        self.network_df                 = self.create_network_df(run_number)
+        # Count of each (source, target) transition, copied into network_df's weight
+        # column when results are written (see write_all_results)
+        self.transition_counts = Counter()  # <1>
+```
+1. The network table still starts with every weight at 0. The counts now build up here, and the table is filled in once at the end (@sec-tour-results).
+:::
+
+::: {.panel-tabset}
+#### Before
+```{.python .numberLines startFrom="291" changed="292-293,295" removed="296" filename="hsm.py:291-296@4188308"}
+            # Prepare source and target variables for network dataframe
+            source = next((v for k, v in self.node_lookup.items() if k == current_step), None)
+            target = next((v for k, v in self.node_lookup.items() if k == next_step), None)
+
+            # Update network graph table
+            self.network_df['weight'] = self.network_df.apply(lambda x: x['weight'] + 1 if x['source'] == source and x['target'] == target else x['weight'], axis = 1)  # <1>
+```
+1. On every step, a Python function was called for each of the 42 rows (about 50,000 calls in the profiled run), and the weight column was rebuilt.
+
+#### After
+```{.python .numberLines startFrom="313" changed="314-315,317" added="318" filename="hsm.py:313-318"}
+            # Prepare source and target variables for network dataframe
+            source = self.node_lookup.get(current_step)  # <1>
+            target = self.node_lookup.get(next_step)  # <1>
+
+            # Count this transition for the network graph table
+            self.transition_counts[(source, target)] += 1  # <2>
+```
+1. A direct dict lookup. It returns `None` for an unknown step, just as the old search's default did.
+2. For patient 4's first step, `('Index_IUC', 'IUC')` maps to `(6, 5)`, and that count goes up by one. Like the old code, this counts every step, including steps during the warm-up period.
+:::
+
+### Storing and writing results {#sec-tour-results}
+
+Result rows and transition counts now pile up in plain Python structures during the run. They become DataFrames once, when the run's results are written.
+
+::: {.panel-tabset}
+#### Before
+```{.python .numberLines startFrom="80" filename="hsm.py:80-80@4188308"}
+        self.results_df.set_index("P_ID", inplace=True)  # <1>
+```
+1. Nothing collected rows: each one was concatenated straight onto `results_df` (next tabs).
+
+#### After
+```{.python .numberLines startFrom="84" added="86-88" filename="hsm.py:84-88"}
+        self.results_df.set_index("P_ID", inplace=True)
+
+        # Result rows are collected here as dicts and added to results_df in one
+        # go when the run's results are written (see write_all_results)
+        self.results_rows = []  # <1>
+```
+1. The empty `results_df` above stays as it was. It still decides the output's columns and dtypes (annotation 3 below).
+:::
+
+::: {.panel-tabset}
+#### Before
+```{.python .numberLines startFrom="379" changed="402" removed="381,383-386,394" filename="hsm.py:379-402@4188308"}
+    def store_patient_results(self, results: dict) -> None:
+        """
+            Adds a row of data to the Class' `result_df` dataframe
+        """
+
+        df_dictionary = pd.DataFrame([results])  # <1>
+
+        self.results_df = pd.concat([self.results_df, df_dictionary], ignore_index=True)  # <1>
+
+
+    def write_all_results(self) -> None:
+        """
+            Writes the content of `result_df` to a csv file
+        """
+        # https://stackoverflow.com/a/30991707/3650230
+
+        # Check if file exists...if it does, append data, otherwise create a new file with headers matching
+        # the column names of `results_df`
+        if not os.path.isfile(self.all_results_location):
+           self.results_df.to_csv(self.all_results_location, header='column_names')
+        else: # else it exists so append without writing the header
+            self.results_df.to_csv(self.all_results_location, mode='a', header=False)
+
+        # Same as above except this is the network graph data  # <2>
+```
+1. One `pd.concat` per result row, copying every row stored so far.
+2. The network table was written as it stood: its weights had already been updated on every step (@sec-tour-step).
+
+#### After
+```{.python .numberLines startFrom="401" changed="427" added="403-404,406,414-419,428-432" filename="hsm.py:401-432"}
+    def store_patient_results(self, results: dict) -> None:
+        """
+            Stores a row of results. Rows are collected in a list because concatenating
+            a DataFrame per row copies every earlier row each time (quadratic in run length).
+        """
+        self.results_rows.append(results)  # <1>
+
+
+    def write_all_results(self) -> None:
+        """
+            Writes the content of `result_df` to a csv file
+        """
+        # https://stackoverflow.com/a/30991707/3650230
+
+        # Add the collected rows in a single concat. Concatenating onto the empty
+        # results_df keeps the column order and dtypes the per-row version produced
+        # (e.g. numbers written as 1.0), which utilities.prep_draw_Sankey relies on.
+        self.results_df = pd.concat([self.results_df, pd.DataFrame(self.results_rows)], ignore_index=True)  # <2>
+
+        # Check if file exists...if it does, append data, otherwise create a new file with headers matching
+        # the column names of `results_df`
+        if not os.path.isfile(self.all_results_location):
+           self.results_df.to_csv(self.all_results_location, header='column_names')
+        else: # else it exists so append without writing the header
+            self.results_df.to_csv(self.all_results_location, mode='a', header=False)
+
+        # Same as above except this is the network graph data. Pairs not in
+        # network_df (e.g. an unknown step, counted as None) are ignored.
+        self.network_df['weight'] = [  # <3>
+            self.transition_counts[(source, target)]  # <3>
+            for source, target in zip(self.network_df['source'], self.network_df['target'])  # <3>
+        ]  # <3>
+```
+1. Storing a row is now constant time. Patient 4's two rows (index call completed, `IUC` scheduled) are simply appended.
+2. One concat of all rows onto the same empty frame the old code started from. That reproduces the old output: the unnamed index column, then `P_ID`, `weekday` and `qtr` at the end, and whole numbers written as `0.0` and `1.0`. `pd.DataFrame(self.results_rows)` alone would put `P_ID` first and keep whole numbers as integers *(inferred from pandas' column and dtype rules; the byte-identical test confirms the concat version)*.
+3. Fills every weight from the counts in one pass. The `Counter` gives 0 for transitions that never happened, matching the old all-zero start. Counts for keys outside the table, such as an unknown step counted as `None`, are dropped, as the old `apply` never matched them.
+:::
+
+Housekeeping: the generator's outdated comment "The interarrival times are recorded in a pandas dataframe." was removed (old `hsm.py:185@4188308`); otherwise only the comments shown changed.
+
+## How the pieces fit together {#sec-fit}
+
+```{mermaid}
+%%| label: fig-hot-loops
+%%| fig-cap: "Lookups are built once; the hot loops only read them and append"
+flowchart LR
+  subgraph startup ["Built once"]
+    CD["CallDispositions: dx lists and dicts"]
+    HI["HSM.__init__: surgeries, arrival rates, start date"]
+    TI["Transitions.__init__: destinations, avoidable probabilities"]
+  end
+  subgraph loops ["Run thousands of times"]
+    A["new caller: Caller and generate_111_calls"]
+    S["each step: next_destination and transition count"]
+    R["each result row: list append"]
+  end
+  CD --> A
+  HI --> A
+  TI --> S
+  A --> S --> R
+  R --> W["write_all_results: one concat, one weight fill"]
+  S --> W
+```
+
+Each lookup is built where its table was already loaded: dispositions in the class body that reads them, surgeries and arrival rates in `HSM.__init__`, transitions in `Transitions.__init__` (@fig-hot-loops). The hot loops now only read dicts and lists, and append to a list or a `Counter`. All DataFrame work moves to the two ends of a run: reading CSVs at the start and writing CSVs at the end.
+
+Nothing outside the model changed. `runSim` still builds an `HSM` and calls `run()`, and the output files are identical, so the Dash results pages read them as before. The original DataFrames still exist, but the hot paths no longer use them.
+
+## Decisions and alternatives {#sec-decisions}
+
+- **Byte-identical output as a hard requirement.** *(stated)* Each refactor had to leave the seeded output unchanged, so the regression test could prove it. This decided every detail below: same row order, same weights, same draws, same concat.
+- **Dropped: batching scipy samples.** *(stated, observed)* The plan included drawing wait and activity times in batches. The profile showed scipy sampling took about 0.1s of a 13s run. Batching would also change the order of random draws, so the fixtures would have needed regenerating and checking statistically. It wasn't worth it.
+- **Keeping the empty `results_df` template.** *(code)* The one-off concat onto the old empty frame preserves the CSV format that `utilities.py:208` depends on. A cleaner `pd.DataFrame(rows)` would change the output (@sec-tour-results).
+- **`weights=` lists, not precomputed cumulative weights.** *(inferred)* `random.choices` computes the same sums internally, and keeping `weights=` makes it obvious the draw is unchanged.
+- **Three commits, tested after each step.** *(stated)* Each was one of the biggest independent wins, checked with the regression test and benchmarked before the next.
+- **Left alone:** *(stated)*
+  - **Pure-Python date handling** (`date_time_of_call`): now negligible.
+  - **Closing the process pool in `oneoneonedes.py`:** a tidy-up, not a speed-up.
+  - **The `tree` transitions:** still slow, because `next_destination_tree` reloads the pickled model from disk on every step into an unused variable. The code describes `tree` as unused.
+
+## Verification {#sec-verification}
+
+- **Regression test:** `pytest` passed (4 passed) after chunk 1, chunk 2 and each of chunk 3's three steps. The suite's runtime fell from about 45-50s to 31.6s, 6.6s, 3.2s and finally 1.8s *(observed)*. It covers quarterly and no-quarter transitions, base and `minmax` arrivals, and the what-if path.
+- **Settings the test doesn't cover:** chunk 2's commit and chunk 3's code were run, seeded, on the `max` inter-arrival option, `mean` arrivals with quarterly what-if, and the `tree` transitions. All three gave identical output *(observed)*.
+- **Benchmarks:** a seeded 3-day run (4,647 result rows), with each version exported read-only from its commit and timed back to back, twice per round. The output hash was identical in every run *(observed)*:
+
+| Round | Original | Chunk 1 | Chunk 2 | Chunk 3 |
+|---|---|---|---|---|
+| A | 10.9s / 10.8s | 5.6s / 5.7s | 2.5s / 2.5s | n/a |
+| B | 31.3s / 31.4s | n/a | 4.7s / 4.9s | 0.2s / 0.2s |
+
+  The same code ran about three times slower in round B than in round A, so compare within a round only. A 7-day run, the app's default length, took 0.3s after chunk 3.
+- **Profile after chunk 3:** the profiled regression case took 0.2s, with no remaining pandas hotspot *(observed)*.
+
+**Gaps:**
+- No simulation was run through the Dash app or its process pool after these changes.
+- Nothing was run on Linux.
+- No long runs (such as 365 days) were timed.
+
+## Limitations and knock-on effects {#sec-limitations}
+
+- **Lookups are snapshots.** They are built from the DataFrames at start-up. Code that later edited one of those DataFrames during a run would no longer affect the simulation *(code)*. Nothing does this today.
+- **Missing keys now raise `KeyError`.** For example, a quarter missing from the transition table. Before, the same case failed on an empty selection, for example with an `IndexError`. Either way the run stops; only the error type changed *(inferred)*.
+- **The commit messages' timings are from different rounds.** Chunk 1's message says 34.5s → 14.7s, measured while the machine was busier. Back to back, the same versions took 10.9s and 5.6s (round A).
+- **App start-up may now dominate short simulations.** Each pool worker on Windows starts a fresh Python and imports pandas, scipy and the model, which probably takes longer than a short run now does *(inferred; not measured)*.
+- **The arrival cut-off bug is still there,** and still pinned by the regression test: calls keep arriving during the 4,320-minute follow-up (`hsm.py:185-186`). Fixing it will change the output and need the fixtures regenerated.
+
+## Check your understanding {#sec-quiz}
+
+**1. For patient 4's first step, which key does `next_destination` look up, and which list of weights does it pass to `random.choices`?**
+
+::: {.callout-note collapse="true" title="Answer"}
+The key `('Index_IUC', 1)`, because the transitions are quarterly and it is quarter 1. Patient 4 had no timely GP contact, so the "no" weights are used. See @sec-tour-step.
+:::
+
+**2. Halfway through a run, what does `network_df`'s `weight` column contain?**
+
+::: {.callout-note collapse="true" title="Answer"}
+All zeros, as created by `create_network_df`. During the run, counts go only into `self.transition_counts`. The column is filled from them in `write_all_results`. See @sec-tour-step and @sec-tour-results.
+:::
+
+**3. Why does `write_all_results` concatenate the collected rows onto the empty `results_df` instead of writing `pd.DataFrame(self.results_rows)` directly?**
+
+::: {.callout-note collapse="true" title="Answer"}
+To keep the old CSV format exactly: the template's column order and the float dtypes, which write whole numbers as `1.0`. The Sankey preparation in `utilities.py:208` relies on that format, and the regression test checks it byte for byte. See annotation 2 in @sec-tour-results.
+:::
+
+## Worth remembering {#sec-remember}
+
+- In this model, never filter, query, `apply` or concatenate a DataFrame per caller, step or result row. Build a dict or list in an `__init__` and read it in the loop.
+- To keep seeded output identical, a lookup must give the same values in the same order as the code it replaces. Build lists in CSV row order.
+- `results_df` is only filled in `write_all_results`. Anything that reads results during a run must read `self.results_rows`, and the network weights live in `self.transition_counts` until then.
+- After any change to the model, run `pytest`. It takes under 2 seconds now.
+
+## Useful elsewhere {#sec-useful}
+
+- **Gotcha: `pd.concat` in a loop is quadratic (pandas 1.4.4).** Each call copies every row already in the frame, so a run twice as long takes about four times as long to store its results. Collect dicts in a list and build the DataFrame once. Here that halved a 3-day run on its own (@sec-tour-results) *(observed)*.
+- **Gotcha: an empty DataFrame decides the dtypes of what you concatenate onto it (pandas 1.4.4).** Concatenating integer rows onto empty float columns gives floats, so `1` is written as `1.0`, and missing columns are added at the end. A faster rewrite has to keep that step if the exact output matters (@sec-tour-results) *(observed in the saved CSVs)*.
+- **Pattern: precompute lookups for a simulation's hot loop.** Small tables queried per event belong in dicts keyed by exactly what the loop knows. The cost: a little start-up time, and lookups that don't follow later edits to the DataFrame. Here it took a 3-day run from 4.7s to 0.2s (@sec-tour-step) *(observed)*.
+- **Technique: profile before optimising.** The plan expected scipy sampling to be expensive. It took about 1% of the run, so the riskiest planned change was dropped (@sec-decisions) *(observed)*.
+- **Technique: benchmark versions back to back, from exports of each commit.** `git archive <commit> | tar -x -C <dir>` gives a copy of any version to time, with no checkout. Here the same code ran three times slower in one round than another, so only same-round comparisons were trusted (@sec-verification) *(observed)*.
+
+## Scope and provenance {#sec-scope}
+
+- **Scope**: commits `364702f` (result rows), `f86edd2` (arrival rates) and `8a5fc92` (per-step lookups), on top of `4188308`, on branch `add-codebase-tutorial`. They weren't on the remote when this was written, so there are no permalinks.
+- **Related work, documented elsewhere**:
+  - The regression test that guards these changes: `kompreni/walkthroughs/2026-11-25-seeded-golden-master-regression-test.qmd`.
+  - The random seed setting: `kompreni/walkthroughs/2026-11-25-reproducible-runs-random-seed.qmd`.
+- **Not from this work**: the untracked `output/MOOOD-study/_publish.yml`.
+- **Supersedes** `kompreni/walkthroughs/2026-11-25-faster-simulation-without-pandas-hot-loops.qmd`, the same tour made by hand before the walkthrough skill produced Before/After tabs and line marks. This version takes its Before ranges and marks from `before_range.py`, and the checker confirms the marks against the diff.
+- **Pull request**: none.
+- **Snapshot**: `tree=5ea12baebfb585c828acf50209b23eb1e7218a3f head=8a5fc929a44f5136ad4074e3447b5980176eb61c`.

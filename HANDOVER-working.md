@@ -72,6 +72,8 @@ Tracks [HANDOVER-original.md](HANDOVER-original.md): what has and hasn't been ac
 
 ## In progress / not yet verified
 
+- [ ] `examples/` (explain, walkthrough, code tour of one real change) is linked from the README via GitHub Pages URLs. Pages isn't enabled yet: once `.nojekyll` and `examples/` are pushed to main, enable Pages from main, root
+
 - [ ] §9 Phase 1: "Test this on several different types of changes": the 8 scenarios in `evals/scenarios/` are written but **not yet run**
 - [ ] Check the frontmatter fields and `$ARGUMENTS` handling against current Claude Code skill docs
 - [ ] Run `claude plugin validate .`
@@ -84,7 +86,7 @@ Tracks [HANDOVER-original.md](HANDOVER-original.md): what has and hasn't been ac
 
 - [ ] §4 Layer 3 persistent knowledge, §9 Phases 3 and 5. The walkthrough front matter is the starting point, and `kompreni.lessons` is the obvious first thing to index ("gotchas met before with this library"). Next: an index or listing across `kompreni/walkthroughs/`, and how agents find relevant walkthroughs before changing code
 - [ ] Walkthroughs: re-pin a `dirty: true` walkthrough to a SHA after commit; interactive exercises beyond collapsed Q&A
-- [x] §5 / §9 Phase 4 first mod: `mods/kompreni-offer` (an Explain row above the prompt, shown always by default or only after turns with edits via `show=changes`; fills the command). Validated, type-checked and unit-tested; **not yet tried in a live session or in VS Code**
+- [x] §5 / §9 Phase 4 first mod: `mods/kompreni-offer` (an Explain row above the prompt, shown always by default or only after turns with edits via `show=changes`; fills the command). Validated, type-checked and unit-tested; seen working in VS Code (2026-11-26 screenshots, now in `docs/images/` and the README)
 - [ ] Mods: richer UI (a pane listing changed files, per-file explain), capture of Bash-made changes (e.g. a git snapshot per turn), access to earlier explanations
 - [ ] §5 Other agent integrations
 - [ ] §8 Name availability check (GitHub, registries, domains, trademark)
