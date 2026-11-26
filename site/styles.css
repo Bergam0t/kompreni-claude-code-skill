@@ -14,6 +14,15 @@
 body.kompreni-wide main.content {
   grid-column: screen-start-inset / screen-end-inset;
 }
+/* ...but keep running text at a readable line length. The table, tabs and
+   embedded pages still use the full width. */
+body.kompreni-wide main.content > :is(p, ul, ol),
+body.kompreni-wide .kompreni-compare .tab-pane > :is(p, ul, ol) {
+  max-width: 52rem;
+}
+body.kompreni-wide .kompreni-chat {
+  max-width: 64rem;
+}
 
 /* Compare page: keep the tabs clear of the fixed navbar when a #tab link scrolls to them */
 .kompreni-compare { scroll-margin-top: 5rem; }

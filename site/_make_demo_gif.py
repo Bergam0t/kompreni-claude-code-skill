@@ -111,9 +111,13 @@ class DevTools:
         return result
 
 
+class QuietHandler(http.server.SimpleHTTPRequestHandler):
+    def log_message(self, *args):
+        pass
+
+
 def serve(directory):
-    handler = functools.partial(http.server.SimpleHTTPRequestHandler, directory=str(directory))
-    handler.log_message = lambda *a: None
+    handler = functools.partial(QuietHandler, directory=str(directory))
     server = http.server.ThreadingHTTPServer(("127.0.0.1", PORT), handler)
     server.handle_error = lambda *a: None  # the browser drops connections when it closes
     threading.Thread(target=server.serve_forever, daemon=True).start()
