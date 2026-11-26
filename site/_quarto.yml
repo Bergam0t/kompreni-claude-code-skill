@@ -1,0 +1,44 @@
+# Build: python _prepare.py && quarto render   (from this folder)
+# _prepare.py copies files from outside site/ into it. It can't be a
+# pre-render script: Quarto resolves {{< include >}} before pre-render runs.
+project:
+  type: website
+  output-dir: _site
+  resources:
+    - examples/*.html
+    - compare.js
+
+website:
+  title: "Kompreni"
+  description: "Understand what an AI coding agent changed, why it changed, and how it fits into your codebase."
+  site-url: https://bergam0t.github.io/kompreni-claude-code-skill/
+  repo-url: https://github.com/Bergam0t/kompreni-claude-code-skill
+  page-navigation: true
+  navbar:
+    left:
+      - href: index.qmd
+        text: Home
+      - href: install.qmd
+        text: Install
+      - href: compare.qmd
+        text: Compare
+      - href: usage.qmd
+        text: Usage
+      - href: mod.qmd
+        text: The mod
+      - href: how-it-works.qmd
+        text: How it works
+    right:
+      - icon: github
+        href: https://github.com/Bergam0t/kompreni-claude-code-skill
+        aria-label: GitHub repository
+
+format:
+  html:
+    theme:
+      light: flatly
+      dark: darkly
+    respect-user-color-scheme: true
+    css: styles.css
+    toc: true
+    code-copy: true

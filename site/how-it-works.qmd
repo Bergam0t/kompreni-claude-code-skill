@@ -1,0 +1,40 @@
+---
+title: "How it works"
+---
+
+- **Git** supplies what changed, including edits made through shell commands. **The conversation** supplies why.
+- Changes are grouped by purpose, not file, and the depth (brief, standard or deep) is matched to the size of the change.
+- Verification reports only tests actually run in the session.
+- Changes in git that the session didn't make (your own uncommitted work) are listed separately.
+
+## Evidence labels
+
+Every reason is labelled with its source, so motives and history are never made up, and you can tell what's known from what's inferred:
+
+| Label | Meaning |
+|---|---|
+| *(code)* | The code or diff shows it |
+| *(stated)* | Someone said it in the conversation |
+| *(observed)* | It was seen happening in the session, such as an error or a test result |
+| *(commit `sha`)*, *(PR #n)* | A commit message or pull request says it (history mode) |
+| *(inferred)* | Claude's own reasoning |
+
+## Checked references
+
+Quoted code is copied verbatim with its location, or marked `illustrative`. A small script, [`check_refs.py`](https://github.com/Bergam0t/kompreni-claude-code-skill/blob/main/skills/explain/scripts/check_refs.py) (Python 3.9+, standard library only), checks every snippet and `file:line` reference against the repo before the explanation or walkthrough is shown. It understands both Markdown and Quarto code blocks, and GitHub permalinks. It can't check that the prose about the code is right.
+
+## Snapshots
+
+To make "since the previous explanation" reliable, each explanation of this session's changes ends with a line like `Kompreni snapshot: tree=4f2a91c… head=51d0a3b…`. That's a git snapshot of your working tree, taken without changing your files, index, branches or stash. Its only side effect is unreferenced objects inside `.git`, which git cleans up in time. Untracked files over 5 MB are left out of it.
+
+## Before/After marks
+
+In Quarto, the lines a change touched are tinted yellow (changed), green (added) or red (removed; never hidden), with a `~`, `+` or `−` beside the line number so the kind doesn't rely on colour. A second script, [`before_range.py`](https://github.com/Bergam0t/kompreni-claude-code-skill/blob/main/skills/explain/scripts/before_range.py), maps each After block to the matching old lines through the diff, and gives these marks.
+
+## Relation to codebase-tutorial
+
+[codebase-tutorial](https://github.com/Bergam0t/tutorial-codebase-knowledge-claude-code-skill) explains how a codebase works. Kompreni explains how and why it changed.
+
+## Roadmap
+
+Version 0.1.0. Next: persistent knowledge that can be searched across walkthroughs, starting from their front matter.

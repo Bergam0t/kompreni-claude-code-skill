@@ -1,0 +1,111 @@
+---
+title: "Usage"
+---
+
+Not sure which command you need? See [Compare](compare.qmd) for the three outputs side by side.
+
+## Explain
+
+```text
+/kompreni:explain
+/kompreni:explain depth=deep focus=src/api
+```
+
+The depth (`brief`, `standard` or `deep`) is matched to the size of the change unless you set it. `focus=` narrows the explanation to a path or topic.
+
+**Several explanations in one conversation.** Each explanation covers only what changed since the previous one, and says how the new changes interact with the earlier ones. Use `scope=all` for one consolidated explanation of everything the conversation changed, e.g. before committing.
+
+**Lessons that travel.** When a change teaches something beyond itself, a "Useful elsewhere" section says so: a library gotcha the change ran into, a design pattern worth reusing, or a debugging or testing technique that worked. Each item points to where it shows up in this change and is labelled with its evidence (see [How it works](how-it-works.qmd)). It's left out when there's nothing real to say, which is often.
+
+## Matching your experience
+
+```text
+/kompreni:explain level=new-to-language
+/kompreni:explain level="fluent in R, new to Python"
+```
+
+`level` sets how much language and library background is explained alongside the change:
+
+- `new-to-programming` (or `beginner`): general programming concepts as well as the language;
+- `new-to-language`: syntax, idioms, gotchas and libraries, for experienced programmers;
+- `intermediate` (the default): only less-common features;
+- `advanced`: no background at all;
+- or describe yourself in free text, and new constructs are explained by comparison with what you know.
+
+If you don't give a level, Kompreni uses `intermediate`, unless something in this conversation, your `CLAUDE.md` or Claude's memory describes your experience (for example "I'm new to Python"). The level used is named in the first line, so you can correct it.
+
+## Explaining history: a branch, a commit, or a range
+
+```text
+/kompreni:explain branch=feature-x              # what the branch adds over the default branch
+/kompreni:explain branch=feature-x onto=develop
+/kompreni:explain commit=abc1234
+/kompreni:explain since=v1.2.0
+```
+
+In history mode the conversation can't say why something was done, so the explanation draws on commit messages, the pull request (if the GitHub CLI `gh` is available) and the code. Each reason is labelled with its source. If the commit sequence shows an approach that was tried and replaced, or fixes made after review, it adds a short "How it got here". The skill never checks out, stashes or resets anything.
+
+## Walkthroughs: a document worth keeping
+
+For a substantial change, `/kompreni:walkthrough` writes a guided walkthrough to a file instead of the chat. It's for someone reading later, who wasn't in the conversation.
+
+```text
+/kompreni:walkthrough
+/kompreni:walkthrough branch=feature-x level=new-to-language
+/kompreni:walkthrough commit=abc1234 format=md
+/kompreni:walkthrough code=all            # a code tour: every changed line, annotated
+```
+
+### What it changes in your repo
+
+It writes the walkthrough to `kompreni/walkthroughs/<date>-<slug>.qmd` (or `.md`), meant to be committed; `out=` changes the folder.
+
+If the changes aren't committed yet, it first asks whether to commit them, saying what it would commit and with what message. Only the session's own changes are committed, and nothing is pushed. A walkthrough tied to a commit keeps references that can always be checked and, on GitHub, permalinks. If you say no, the walkthrough notes that its line references point at the working tree as it was, and may drift.
+
+### Format and rendering
+
+- **Format**: Quarto (`.qmd`) if Quarto is installed or your repo is already a Quarto project, otherwise GitHub-flavoured Markdown (`.md`). Force one with `format=qmd|md`.
+- **Rendering**: a `.qmd` is rendered to a single self-contained HTML file next to it, with a light/dark toggle. If the folder has no `.gitignore`, one is created to keep the HTML out of git. An existing one is left alone, so if you use `out=`, check that it ignores `*.html`.
+- **Inside an existing Quarto project**: the walkthrough isn't rendered by default, because Quarto would send it into your site's output, and your site's own theme and layout apply. Exclude `kompreni/` in your `_quarto.yml` if you don't want walkthroughs on your site.
+
+### What's in it
+
+- the problem, then one concrete example traced through the code before and after the change;
+- annotated excerpts and before/after comparisons: in Quarto, Before/After tabs with the changed, added and removed lines marked; in Markdown, two labelled blocks;
+- a diagram, only if the flow changed;
+- the decisions with their evidence, honest verification, limitations, and a few questions with hidden answers (`quiz=off` to leave them out);
+- "Useful elsewhere", when the change teaches something that applies beyond it (also listed in the front matter, so these lessons can be searched across walkthroughs later).
+
+It's **proportionate**: for a small change it suggests `/kompreni:explain` instead, and asks before writing. The **front matter** records the range, commits, files, level and tests (`kompreni:` in the YAML). This is the start of Kompreni's searchable change history.
+
+### Code tours
+
+`code=all` turns a walkthrough into a code tour. Instead of a few key excerpts, it shows all the substantive changed code, with a little context, in order of the call flow.
+
+- It uses Quarto code annotations: numbered markers on the lines, with explanations below each block that highlight their lines when clicked.
+- Line numbers match the real files.
+- Every block from a file that already existed has Before and After tabs covering the same whole unit, so the old and new code can be compared in place. New files and tests have no tabs.
+- Test changes are annotated inside collapsed sections, and housekeeping is summarised.
+- A code tour is always `.qmd`, rendered to HTML only if Quarto is installed. With `format=md`, it asks which you want.
+
+The walkthrough shares `level=`, `focus=` and history mode with `/kompreni:explain`. It covers the whole conversation by default (`scope=all`).
+
+## All options
+
+Every option is a `key=value` pair after the command, and all are optional. A ✓ means the command accepts it. The [mod](mod.qmd) fills in only some of them, but the command lands in your prompt box, so you can add any other option before pressing Enter.
+
+| Option | Values (default first) | Explain | Walkthrough / code tour | In the kompreni-offer mod |
+|---|---|:-:|:-:|---|
+| `depth` | auto, `brief`, `standard`, `deep` | ✓ | ✓ `standard` or `deep` only | Depth picker, remembered across sessions. Walkthrough buttons pass it only if it's `standard` or `deep` |
+| `level` | auto, `new-to-programming` (`beginner`), `new-to-language`, `intermediate`, `advanced`, or free text in quotes | ✓ | ✓ | Level picker, remembered across sessions. Set free text with `/kompreni-offer level="..."` and it joins the picker |
+| `scope` | Explain: `new`, `all`. Walkthrough: `all`, `new` | ✓ | ✓ | Scope picker (or a **Whole conversation** button on the one-line row), shown after the first explanation, for the session only. Used by Explain; walkthrough buttons never pass it |
+| `focus` | a path or topic | ✓ | ✓ | No |
+| `branch` (with `onto`), `since`, `commit` | a branch, ref or commit; at most one of the three | ✓ | ✓ | No: the mod is for this session's changes |
+| `code` | `key`, `all` | | ✓ | The **Code tour** button fills in `code=all` |
+| `format` | auto (`qmd` if Quarto is installed or the repo is a Quarto project), `qmd`, `md` | | ✓ | No |
+| `out` | `kompreni/walkthroughs` or another folder | | ✓ | No |
+| `render` | `auto`, `yes`, `no` | | ✓ | No |
+| `quiz` | `on`, `off` | | ✓ | No |
+| `title` | taken from the changes, or your own in quotes | | ✓ | No |
+
+The mod has settings of its own, which aren't skill options: see [the mod's settings](mod.qmd#settings).

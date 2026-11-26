@@ -1,0 +1,66 @@
+---
+title: "Install"
+---
+
+## Requirements
+
+- Claude Code.
+- A git repository. Without one, Kompreni can only use what the conversation edited, and says that coverage may be incomplete.
+- Optional:
+    - Python 3.9 or later, to check every quoted snippet and line reference against the repo. Without it, Claude checks by hand and says so.
+    - [Quarto](https://quarto.org), for walkthroughs with tabs and code annotations, rendered to HTML. Without it, walkthroughs are Markdown, and code tours are written as `.qmd` but not rendered.
+    - The GitHub CLI [`gh`](https://cli.github.com), to draw on pull requests when explaining a branch.
+    - For the optional [mod](mod.qmd): a Claude Code version with mod support (tested with 2.1.331).
+
+## Install from the marketplace
+
+In Claude Code:
+
+```text
+/plugin marketplace add Bergam0t/kompreni-claude-code-skill
+/plugin install kompreni@kompreni
+```
+
+That gives you `/kompreni:explain` and `/kompreni:walkthrough`.
+
+### Optional: the buttons above the prompt
+
+```text
+/plugin install kompreni-offer@kompreni
+```
+
+This installs the [kompreni-offer mod](mod.qmd), which adds a row of buttons above Claude Code's prompt box.
+
+::: {.callout-warning}
+## Mods aren't sandboxed
+A mod runs as code inside Claude Code. Read [`hooks/register.tsx`](https://github.com/Bergam0t/kompreni-claude-code-skill/blob/main/mods/kompreni-offer/hooks/register.tsx) before installing it.
+:::
+
+## Update
+
+```text
+/plugin marketplace update kompreni
+/plugin update kompreni@kompreni
+/plugin update kompreni-offer@kompreni    # if you have the mod
+```
+
+## Uninstall
+
+```text
+/plugin uninstall kompreni@kompreni
+/plugin uninstall kompreni-offer@kompreni    # if you have the mod
+```
+
+## Try it without installing
+
+```bash
+git clone https://github.com/Bergam0t/kompreni-claude-code-skill
+claude --plugin-dir kompreni-claude-code-skill
+```
+
+To try the mod too, add `--plugin-dir kompreni-claude-code-skill/mods/kompreni-offer`.
+
+## Next
+
+- [Compare the three outputs](compare.qmd) on one real change.
+- [Usage and all options](usage.qmd).

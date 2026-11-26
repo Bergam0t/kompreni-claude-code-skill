@@ -4,3 +4,10 @@ __pycache__/
 
 # Types Claude Code writes when it loads a mod
 mods/*/.claude-plugin/types/
+
+# Docs site: rendered output and files copied in by site/_prepare.py
+site/_site/
+site/.quarto/
+site/examples/
+site/images/mod/
+site/_generated/

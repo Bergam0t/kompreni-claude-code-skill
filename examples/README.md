@@ -1,6 +1,6 @@
 # Examples
 
-The same change, explained three ways. The change is three commits that sped up a discrete-event simulation (SimPy and pandas) by building its lookups once instead of filtering DataFrames in every loop.
+The same change, explained three ways. To switch between them in tabs, see [Compare the three outputs](https://bergam0t.github.io/kompreni-claude-code-skill/compare.html) on the docs site. The change is three commits that sped up a discrete-event simulation (SimPy and pandas) by building its lookups once instead of filtering DataFrames in every loop.
 
 | | Source | Rendered |
 |---|---|---|

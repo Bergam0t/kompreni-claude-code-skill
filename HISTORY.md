@@ -75,3 +75,7 @@
     - They fill in `/kompreni:walkthrough` (with `code=all` for Code tour), with the chosen level, and the depth only if it's `standard` or `deep`; never a scope
     - Shown only when the walkthrough skill is installed, on both the full and the one-line row; never overwrite a draft
     - A session-mode walkthrough, typed or invoked by Claude, now resets the count like an explanation does
+- Add a documentation site on GitHub Pages
+    - A Compare page shows one real change as an explanation, a walkthrough and a code tour, in tabs; `compare.html#explain`, `#walkthrough` and `#code-tour` link to a tab
+    - Install, Usage (with all options), the kompreni-offer mod (with screenshots) and How it works pages
+    - Built from `site/` by a GitHub Action on each push to main; the README now keeps the essentials and links to the site

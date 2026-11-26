@@ -1,0 +1,67 @@
+---
+title: "Compare the three outputs"
+subtitle: "One real change, explained three ways."
+toc: false
+include-after-body:
+  text: <script src="compare.js"></script>
+---
+
+The change: three commits that made a discrete-event simulation (SimPy and pandas) tens of times faster. The simulation used to build and filter a pandas DataFrame for every caller, every step of a journey and every result row. Those lookups are now built once, and the seeded output is byte-identical. The code is in [ReModel-Club/MOOOD-study](https://github.com/ReModel-Club/MOOOD-study/tree/add-codebase-tutorial), so the `file:line` references below point there.
+
+|  | Explain | Walkthrough | Code tour |
+|---|---|---|---|
+| **Command** | `/kompreni:explain` | `/kompreni:walkthrough` | `/kompreni:walkthrough code=all` |
+| **Output** | An answer in the chat; no files | A `.qmd` or `.md` file, rendered to HTML, meant to be committed | Same as a walkthrough, always `.qmd` |
+| **Code shown** | Short verbatim snippets | One to three key excerpts, with before/after comparisons | All the substantive changed code, annotated line by line, with Before/After tabs |
+| **Use when** | You want to understand a change now | A substantial change deserves a record for someone reading later | You, or a reviewer, want to understand every changed line from the code itself |
+
+::: {.panel-tabset .kompreni-compare}
+
+## Explain
+
+`/kompreni:explain since=4188308 depth=deep` · [View on GitHub](https://github.com/Bergam0t/kompreni-claude-code-skill/blob/main/examples/explain.md){.btn .btn-secondary .btn-sm}
+
+**What to notice**
+
+- The first line says which depth and level it used, so you can correct them.
+- The reasons are labelled with their evidence: *(stated)*, *(observed)*, *(code)*, *(inferred)*.
+- Quoted code carries its location, including old code at its old commit (`hsm.py:386@4188308`).
+- "Useful elsewhere" picks out the lessons that apply beyond this change.
+
+::: {.kompreni-chat}
+[As it appears in the chat]{.kompreni-chat-label}
+
+{{< include _generated/explain.qmd >}}
+:::
+
+## Walkthrough
+
+`/kompreni:walkthrough since=4188308 depth=deep` · [Open the full page](examples/walkthrough.html){.btn .btn-secondary .btn-sm target="_blank"}
+
+**What to notice**
+
+- It starts with the problem and the old behaviour, for a reader who wasn't in the conversation.
+- "How it works now" has a few key excerpts, with Before/After tabs where the lines the change touched are marked.
+- A diagram shows the flow, because the flow changed.
+- "Check your understanding" has questions with hidden answers.
+
+```{=html}
+<iframe class="kompreni-frame" src="examples/walkthrough.html" loading="lazy" title="Example walkthrough"></iframe>
+```
+
+## Code tour
+
+`/kompreni:walkthrough code=all` · [Open the full page](examples/code-tour.html){.btn .btn-secondary .btn-sm target="_blank"}
+
+**What to notice**
+
+- "Code tour" goes through all the changed code in the order it runs: a caller arrives, each step of a journey, then storing results.
+- Click a numbered explanation below a block to highlight its lines.
+- Each block has Before and After tabs. Changed lines are yellow (`~`), added green (`+`) and removed red (`−`).
+- Line numbers match the real files.
+
+```{=html}
+<iframe class="kompreni-frame" src="examples/code-tour.html" loading="lazy" title="Example code tour"></iframe>
+```
+
+:::

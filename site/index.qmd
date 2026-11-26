@@ -1,0 +1,66 @@
+---
+title: "Kompreni"
+subtitle: "Understand what an AI coding agent changed, why it changed, and how it fits into your codebase."
+toc: false
+---
+
+*Esperanto for "to understand".* Agent completion summaries tell you what was done. Kompreni helps you build a mental model of how and why your code evolved.
+
+It's a plugin for [Claude Code](https://claude.com/claude-code) with two commands, and three ways to use them:
+
+::: {.grid}
+
+::: {.g-col-12 .g-col-md-4 .kompreni-card}
+### Explain
+
+`/kompreni:explain`
+
+An answer in the chat that explains what changed, why, and how it fits in. Nothing is written to your repo. Use it to understand a change now.
+
+[See an example](compare.qmd#explain){.btn .btn-primary}
+:::
+
+::: {.g-col-12 .g-col-md-4 .kompreni-card}
+### Walkthrough
+
+`/kompreni:walkthrough`
+
+A document to commit, for someone reading later who wasn't in the conversation: a reviewer, a teammate, or you in six months.
+
+[See an example](compare.qmd#walkthrough){.btn .btn-primary}
+:::
+
+::: {.g-col-12 .g-col-md-4 .kompreni-card}
+### Code tour
+
+`/kompreni:walkthrough code=all`
+
+A walkthrough that goes through every changed line, with numbered annotations and Before/After tabs.
+
+[See an example](compare.qmd#code-tour){.btn .btn-primary}
+:::
+
+:::
+
+All three examples cover the same real change, so you can [compare them side by side](compare.qmd).
+
+## What makes it different
+
+- **It explains why, not just what.** Git supplies what changed, including edits made through shell commands. The conversation, commit messages and pull requests supply why.
+- **It doesn't make things up.** Every reason is labelled with its source, such as *(stated)* in the conversation, *(code)*, or *(inferred)*, so you can tell what's known from what's guessed. Quoted code is checked against the repo by a script before you see it.
+- **It matches your experience.** Tell it you're new to the language, or "fluent in R, new to Python", and it explains the constructs the change relies on in those terms.
+- **It works on history too.** Explain a branch, a commit, or everything since a tag, not just what the agent did in this session.
+
+## Quick start
+
+[Install it](install.qmd), then, after Claude has changed some code:
+
+```text
+/kompreni:explain                 # explain the changes in the chat
+/kompreni:walkthrough             # write them up as a document to keep
+/kompreni:walkthrough code=all    # a code tour: every changed line, annotated
+```
+
+Or just ask: "explain what you changed" gives you an explanation, and "write a walkthrough of this" gives you the document. Neither runs on its own after a task.
+
+Prefer buttons? The optional [kompreni-offer mod](mod.qmd) adds them above Claude Code's prompt box.
