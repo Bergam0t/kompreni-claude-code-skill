@@ -63,4 +63,15 @@ All three examples cover the same real change, so you can [compare them side by 
 
 Or just ask: "explain what you changed" gives you an explanation, and "write a walkthrough of this" gives you the document. Neither runs on its own after a task.
 
-Prefer buttons? The optional [kompreni-offer mod](mod.qmd) adds them above Claude Code's prompt box.
+## Prefer buttons?
+
+The optional [kompreni-offer mod](mod.qmd) adds a row above Claude Code's prompt box. It counts the files changed since the last explanation, and has depth and level pickers and **Explain**, **Walkthrough** and **Code tour** buttons that fill in the command for you. You press Enter; it never submits for you.
+
+![The kompreni-offer row above the prompt in VS Code: "18 files changed in this conversation", Depth and Level pickers, and Explain, Walkthrough, Code tour and Dismiss buttons](images/mod/row.png)
+
+It's installed separately with `/plugin install kompreni-offer@kompreni`. See [the mod's page](mod.qmd) for its settings.
+
+::: {.callout-warning}
+## Mods aren't sandboxed
+A mod runs as code inside Claude Code. Read [`hooks/register.tsx`](https://github.com/Bergam0t/kompreni-claude-code-skill/blob/main/mods/kompreni-offer/hooks/register.tsx) before installing it.
+:::

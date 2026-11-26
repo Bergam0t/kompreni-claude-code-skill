@@ -8,6 +8,7 @@
 }
 .kompreni-card h3 { margin-top: 0; border-bottom: none; }
 .kompreni-card .btn { margin-top: auto; align-self: flex-start; }
+.grid:has(> .kompreni-card) { margin-bottom: 1.25rem; }
 
 /* Compare page: keep the tabs clear of the fixed navbar when a #tab link scrolls to them */
 .kompreni-compare { scroll-margin-top: 5rem; }
