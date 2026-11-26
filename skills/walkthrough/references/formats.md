@@ -49,23 +49,37 @@ Text: "This walkthrough was written on <date> before the changes were committed.
 
 ## Before and after
 
-`qmd`: a tabset. Use `group="before-after"` and the tab names exactly `Before` and `After`, so all such tabsets in the document switch together. The tab headings are one level below the section they're in.
+`qmd`: a plain tabset with the tab names exactly `Before` and `After`, in that order (the checker relies on them). By convention the tab headings are one level below the section they're in. Quarto 1.11 keeps tab headings out of the TOC at either level *(observed)*.
+
+**Don't link the tabsets** with `group="..."`. A group keeps every tabset in it on the same tab, so switching one block resizes all the others, including the ones above where the reader is, and the page jumps. Without `group`, each tabset switches on its own. The checker warns about a `group`.
+
+**Mark the lines the change touched**, using the file's own line numbers (the same numbering as the caption). A script in the front matter (`front-matter.md`) tints them by kind, and puts a symbol between the line number and the code, so the kind doesn't depend on colour alone:
+
+| Attribute | Tint | Symbol | Meaning | In |
+|---|---|---|---|---|
+| `changed="<lines>"` | yellow | `~` | Modified: the line has a similar counterpart in the other tab | Before and After |
+| `added="<lines>"` | green | `+` | New, with no counterpart in Before | After |
+| `removed="<lines>"` | red | `−` | Gone, with no counterpart in After | Before |
+
+For example `changed="42" added="43-45"`. Context lines stay plain. The marks need `.numberLines` and `startFrom`. A line has one kind. Removed lines are only tinted, never hidden. The symbols are CSS content, so copying the code doesn't copy them. Within each diff hunk, old and new lines are paired by similarity, keeping their order: paired lines are changed, the rest removed or added. So a changed line in Before has a changed partner in After. Take the values from `<explain>/scripts/before_range.py` (see `code-tour.md`, "Finding the Before range"), never by counting by hand. With `--coverage`, the checker notes any that don't match the diff.
 
 ````markdown
-::: {.panel-tabset group="before-after"}
-### Before
-```{.python filename="src/api.py:40-44@abc1234"}
+::: {.panel-tabset}
+#### Before
+```{.python .numberLines startFrom="40" changed="42" removed="43" filename="src/api.py:40-44@abc1234"}
 ...exact old lines...
 ```
 
-### After
-```{.python filename="src/api.py:40-46"}
+#### After
+```{.python .numberLines startFrom="40" changed="42" added="43-45" filename="src/api.py:40-46"}
 ...exact new lines...
 ```
 :::
 ````
 
-`md`: two consecutive blocks, each preceded by a bold label: `**Before** (at `abc1234`)` and `**After**`.
+These work inside a tab *(observed, Quarto 1.11)*: `.numberLines startFrom` with an `@<base>` caption, line marks, and an annotation list straight after each block, within its tab.
+
+`md`: two consecutive blocks, each preceded by a bold label: `**Before** (at `abc1234`)` and `**After**`. GitHub has no line marks; say in the annotation list which lines changed.
 
 ## Code annotations (`qmd` only)
 
@@ -104,6 +118,7 @@ Comment syntax: `#` (Python, R, shell, YAML), `//` (JS, TS, C-family, Rust, Go),
   ````
 - `md`: a plain ```` ```mermaid ```` block (GitHub renders it) with an italic caption line after it.
 - Keep labels short. Alias participants with spaces in sequence diagrams (`participant Q as Upload queue`). Avoid unescaped double quotes and semicolons in labels.
+- Quote edge labels that contain punctuation: `P -.->|"--update-golden flag"| T`. A label that starts with `--` (`P -. --update-golden .-> T`) fails with "Syntax error in text" *(observed, mermaid 11.12 in Quarto 1.11)*. `quarto render` doesn't report it, because mermaid runs in the browser; SKILL.md step 7 has a check.
 
 ## Questions and answers
 

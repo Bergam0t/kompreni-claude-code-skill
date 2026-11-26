@@ -110,14 +110,18 @@ Never present a walkthrough with unchecked references, snippets or answers.
    ```
    Add `--ref <tip>` in history mode (`HEAD` for `since=`), and `--ref HEAD` if step 4 committed the changes. Fix every `ERROR` and every `warning`, and re-run until it passes. If Python isn't available, check by hand and say so in the reply.
 
-   In a `.qmd`, the checker also checks code annotations: every marker has its list item, nothing comes between a block and its list, and no item has a second paragraph. Quarto gets these wrong silently.
+   In a `.qmd`, the checker also checks code annotations: every marker has its list item, nothing comes between a block and its list, and no item has a second paragraph. Quarto gets these wrong silently. It also checks Before/After tabsets (the tab names, `@<ref>` only in Before, no `group`) and line marks (`changed=`, `added=`, `removed=`).
 
-   With `code=all`, also pass `--coverage <base>..<tip>`. In history mode, `<tip>` is the tip ref. In session mode, use the snapshot's tree as `<tip>`, so untracked files count. Then deal with every `note:` as `references/code-tour.md` says ("Checking coverage").
+   With `code=all`, also pass `--coverage <base>..<tip>`. In history mode, `<tip>` is the tip ref. In session mode, use the snapshot's tree as `<tip>`, so untracked files count. Then deal with every `note:` as `references/code-tour.md` says ("Checking coverage"). The Before ranges and line marks come from `<explain>/scripts/before_range.py` while writing (`code-tour.md`, "Finding the Before range").
 3. Re-check every answer in "Check your understanding" against the code it relies on. If the code doesn't determine an answer, drop the question.
 4. **Render** (`qmd` only, unless `render=no`):
    - If a `_quarto.yml` exists in the walkthrough's folder or any parent, the file belongs to that Quarto project, and rendering sends the HTML to the project's output folder. With `render=auto`, don't render; say why in the reply. With `render=yes`, render and report where the HTML went.
    - Otherwise run `quarto render <file> --to html` from the repo root. The front matter makes the HTML a single self-contained file next to the `.qmd`. Fix anything Quarto warns about and render again until it is clean.
    - If Quarto isn't installed, skip this and say so.
+   - **Diagrams**, if the document has any and Chrome or Edge is installed: mermaid errors appear only in the browser, so `quarto render` can't report them. Load the page headless and look for `class="error-text"`, then fix the diagram and re-render. Skip this silently if there's no browser.
+     ```
+     <chrome or msedge> --headless=new --virtual-time-budget=15000 --dump-dom file:///<absolute path>.html
+     ```
 
 The checker confirms only that quoted code and references exist and match. It can't tell whether your explanation of them is right. Re-read your claims about behaviour against the code you cite.
 

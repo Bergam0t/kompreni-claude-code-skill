@@ -41,7 +41,9 @@
 - `check_refs.py` understands Quarto code blocks (`filename="path:lines"` captions, `.illustrative`, `{mermaid}`, annotation markers), errors on executable `{python}` cells, skips YAML front matter, and checks GitHub permalinks at their commit
 - Add code tours: `/kompreni:walkthrough code=all`
     - Shows all the substantive changed code with a little context, in call-flow order, explained line by line with Quarto code annotations (`code-annotations: below`, so clicking an explanation highlights its lines)
-    - Real line numbers in the margin (`.numberLines startFrom=`), before/after tabs where removed code matters, test changes annotated inside collapsed callouts, housekeeping summarised
+    - Real line numbers in the margin (`.numberLines startFrom=`), test changes annotated inside collapsed callouts, housekeeping summarised
+    - Every block from a file that already existed has Before and After tabs, so the old and new code can be compared in place; Before covers the same whole unit as After, and a pure addition shows the old lines around it. New files and tests have no tabs
+    - New `skills/explain/scripts/before_range.py` maps an After block's lines to the old lines through the diff, and prints both blocks' line numbers and changed-line marks
     - `.qmd` only; `code=all` with `format=md` asks which to use
     - The default, `code=key`, keeps the one-to-three key excerpts
 - `check_refs.py` checks Quarto code annotations and coverage
@@ -49,6 +51,13 @@
     - Errors when `.numberLines` has no `startFrom` matching the caption's first line
     - Recognises `<!-- <n> -->` (Markdown, HTML) and `/* <n> */` (CSS) markers as well as line comments
     - New `--coverage BASE[..TIP]` lists changed lines that no verbatim snippet shows, as notes, ignoring blank lines
+    - Checks Before/After tabsets: exactly the tabs `Before` then `After`, old code (`@<ref>`) only in Before, and a warning for a `group`. With `--coverage`, also notes code-tour blocks that need tabs, and line marks that don't match the diff
+    - Accepts dotfile paths (`.gitattributes:1-3`) and ignores a leading `./`, so such files count as shown in `--coverage`
+- Before/After tabs in Quarto walkthroughs tint the lines the change touched, and switch independently
+    - Yellow for a changed line (it has a similar counterpart in the other tab), green for an added one, red for a removed one; removed lines are tinted, never hidden
+    - A `~`, `+` or `−` beside each marked line's number, so the kind doesn't rely on colour; it isn't copied with the code
+    - Marked with `changed=`, `added=` and `removed=` in the file's own line numbers, paired by similarity within each diff hunk; a small script in the front matter does the tinting, so there's still one self-contained HTML file and no Quarto extension
+    - The tabsets are no longer linked with `group`: switching one resized all the others, and the page jumped
 - Add a "Useful elsewhere" section to explanations, walkthroughs and code tours
     - Lessons from the change that apply beyond it: library gotchas met here, patterns worth reusing, and debugging or testing techniques that worked
     - Each item must be tied to this change, transferable, non-obvious at the reader's level and accurate; generic advice is excluded, and the section is left out when nothing qualifies

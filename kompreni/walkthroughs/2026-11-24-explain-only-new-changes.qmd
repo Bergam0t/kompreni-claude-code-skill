@@ -20,6 +20,33 @@ format:
         body.quarto-dark { --mermaid-label-fg-color: #fff; --mermaid-edge-color: #adb5bd; }
         body.quarto-dark :is(.edgeLabel, .edgeLabel p, .labelBkg) { background-color: var(--mermaid-label-bg-color) !important; }
         </style>
+        <style>
+        div.sourceCode code > span:is(.kompreni-added, .kompreni-removed, .kompreni-changed) { display: inline-block; min-width: 100%; }
+        div.sourceCode code > span.kompreni-added { background: rgba(46,160,67,.18); }
+        div.sourceCode code > span.kompreni-removed { background: rgba(248,81,73,.18); }
+        div.sourceCode code > span.kompreni-changed { background: rgba(214,162,28,.24); }
+        div.sourceCode code > span:is(.kompreni-added, .kompreni-removed, .kompreni-changed)::after { position: absolute; left: 3em; top: 0; width: 1em; text-align: center; font-weight: bold; }
+        div.sourceCode code > span.kompreni-added::after { content: "+"; color: #2ea043; }
+        div.sourceCode code > span.kompreni-removed::after { content: "−"; color: #e5534b; }
+        div.sourceCode code > span.kompreni-changed::after { content: "~"; color: #c69026; }
+        </style>
+        <script>
+        document.addEventListener("DOMContentLoaded", () => {
+          for (const div of document.querySelectorAll("div.sourceCode:is([data-added], [data-removed], [data-changed])")) {
+            const kinds = {};
+            for (const kind of ["added", "removed", "changed"]) {
+              for (const part of (div.dataset[kind] || "").split(",").filter(p => p.trim())) {
+                const [a, b] = part.split("-").map(Number);
+                for (let n = a; n <= (b || a); n++) kinds[n] = kind;
+              }
+            }
+            for (const span of div.querySelectorAll("code > span[id]")) {
+              const kind = kinds[Number(span.id.split("-").pop())];
+              if (kind) span.classList.add("kompreni-" + kind);
+            }
+          }
+        });
+        </script>
 kompreni:
   schema: 1
   kind: walkthrough
@@ -107,14 +134,14 @@ A new script, `skills/explain/scripts/snapshot.py`, records the whole working tr
 
 The skill now takes a snapshot first, then looks back in the conversation for the previous `Kompreni snapshot:` line:
 
-::: {.panel-tabset group="before-after"}
-### Before
-```{.markdown filename="skills/explain/SKILL.md:35@2385843"}
+::: {.panel-tabset}
+#### Before
+```{.markdown .numberLines startFrom="35" changed="35" filename="skills/explain/SKILL.md:35@2385843"}
 Run, in one Bash call: `git status --porcelain`, `git diff --stat HEAD`, and `git log --oneline -n 10`. Then:
 ```
 
-### After
-```{.markdown filename="skills/explain/SKILL.md:38-43"}
+#### After
+```{.markdown .numberLines startFrom="38" added="38-43" filename="skills/explain/SKILL.md:38-43"}
 **Find the baseline.** Look back in this conversation for the most recent line `Kompreni snapshot: tree=<sha> head=<sha>` from an earlier session-mode explanation.
 
 - **`scope=new` and there is one**: explain only what changed since then.

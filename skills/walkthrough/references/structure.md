@@ -6,7 +6,7 @@ A walkthrough teaches the reader a working mental model of the change: what the 
 
 1. **Start from the problem, not the diff.** The reader should know what was wrong or missing before seeing any code.
 2. **One running example.** Pick one concrete input, request or scenario that exercises the change. Trace it through the old code in "Before" and through the new code in "How it works now". Use the same example both times, with real names, values and `file:line` references. This is the single most useful device; skip it only when the change has no runtime behaviour (pure docs, config or refactor with identical behaviour, where you say so).
-3. **Before and after side by side** for the one to three places where behaviour changed most. In `qmd`, use the Before/After tabset from `formats.md`.
+3. **Before and after side by side** for the one to three places where behaviour changed most. In `qmd`, use the Before/After tabset from `formats.md`. In a code tour, every block from a changed file has one (see `code-tour.md`).
 4. **Annotate the key code** instead of describing it at length: a short verbatim excerpt with numbered annotations. At most about three annotated excerpts per walkthrough.
 5. **A diagram only when the flow or the interaction between components changed.** Never draw a diagram of a single function, or one that restates the file list.
 6. **Optional depth goes in collapsed callouts** (`qmd`) or `<details>` (`md`): edge cases, a deep dive into a library, rejected alternatives in detail. Never hide something later sections depend on.

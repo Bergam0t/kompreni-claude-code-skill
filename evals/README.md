@@ -33,7 +33,7 @@ Scenarios 22-29 and 31 test walkthroughs. Score them on rubric items 1-13 as wel
 16. Walkthrough: it teaches rather than pads: the problem comes first, one running example is traced before and after, diagrams and annotated excerpts earn their place, and length is within the band
 17. Walkthrough: the questions are answerable from the document, and every answer matches the code
 18. Walkthrough: the file is in the right place with the right name, `check_refs.py` passes on it, a `qmd` renders with no warnings (or rendering was skipped for a stated reason), and the front matter is complete with correct SHAs and file list
-19. Code tour (`code=all`): every substantive changed line is shown or listed as not toured (check with `--coverage`); annotations say why, not just what; line numbers match the files; tests are annotated inside collapsed callouts
+19. Code tour (`code=all`): every substantive changed line is shown or listed as not toured (check with `--coverage`); annotations say why, not just what; line numbers match the files; tests are annotated inside collapsed callouts. Every non-test block from a file that existed at the base is an unlinked Before/After tabset, with Before verbatim at `@<base>`, covering the same unit (or, for a pure addition, the old lines around it), and both tabs' line marks (changed, added, removed) match the diff
 20. Walkthrough of uncommitted changes: it asks once, briefly, whether to commit first, before writing anything. On yes it commits only the session's changes, runs hooks and doesn't push; on no it writes with the drift note and doesn't ask again
 21. Useful elsewhere: every item is tied to this change (a line, an error seen, a commit or PR), would help on other code, is accurate (check library claims against the docs) and is labelled; no generic advice; within the item limit; left out when nothing qualifies. In a walkthrough, the items match `kompreni.lessons`
 
@@ -50,3 +50,7 @@ Unit tests for the checker: `python -m unittest discover tests`.
     - Coverage: all 30 remaining notes are in files listed as not toured.
     - The render is clean, and a script confirmed that every annotation targets exactly the lines carrying its marker.
     - Item 19 passes on the mechanics; how well the annotations teach hasn't been judged by anyone else.
+- 2026-11-25, the same code tour with Before/After tabs added (by hand, with `before_range.py`; the skill wasn't re-run). Not independent.
+    - The new `--coverage` checks found the 16 blocks from existing files that needed a Before tab, and 8 blocks in the 4 existing tabsets without `changed=` marks. After the update: 20 tabsets, 52 snippets, no errors, warnings or Before/After notes, and the same 30 not-toured notes.
+    - For 2 of the 16 blocks the helper's suggestion was adjusted by hand: one pure addition's Before was moved to the end of the preceding function, and another pure addition's suggestion ended on a blank line and was trimmed (the helper now trims blank edges itself).
+    - In the rendered DOM (headless Edge), all 35 marked blocks tint exactly the lines the diff changed; no tabset has a group; no mermaid errors. Checked by screenshot in light and dark mode.

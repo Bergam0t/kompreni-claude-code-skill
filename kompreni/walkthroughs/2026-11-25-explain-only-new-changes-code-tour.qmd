@@ -20,6 +20,33 @@ format:
         body.quarto-dark { --mermaid-label-fg-color: #fff; --mermaid-edge-color: #adb5bd; }
         body.quarto-dark :is(.edgeLabel, .edgeLabel p, .labelBkg) { background-color: var(--mermaid-label-bg-color) !important; }
         </style>
+        <style>
+        div.sourceCode code > span:is(.kompreni-added, .kompreni-removed, .kompreni-changed) { display: inline-block; min-width: 100%; }
+        div.sourceCode code > span.kompreni-added { background: rgba(46,160,67,.18); }
+        div.sourceCode code > span.kompreni-removed { background: rgba(248,81,73,.18); }
+        div.sourceCode code > span.kompreni-changed { background: rgba(214,162,28,.24); }
+        div.sourceCode code > span:is(.kompreni-added, .kompreni-removed, .kompreni-changed)::after { position: absolute; left: 3em; top: 0; width: 1em; text-align: center; font-weight: bold; }
+        div.sourceCode code > span.kompreni-added::after { content: "+"; color: #2ea043; }
+        div.sourceCode code > span.kompreni-removed::after { content: "−"; color: #e5534b; }
+        div.sourceCode code > span.kompreni-changed::after { content: "~"; color: #c69026; }
+        </style>
+        <script>
+        document.addEventListener("DOMContentLoaded", () => {
+          for (const div of document.querySelectorAll("div.sourceCode:is([data-added], [data-removed], [data-changed])")) {
+            const kinds = {};
+            for (const kind of ["added", "removed", "changed"]) {
+              for (const part of (div.dataset[kind] || "").split(",").filter(p => p.trim())) {
+                const [a, b] = part.split("-").map(Number);
+                for (let n = a; n <= (b || a); n++) kinds[n] = kind;
+              }
+            }
+            for (const span of div.querySelectorAll("code > span[id]")) {
+              const kind = kinds[Number(span.id.split("-").pop())];
+              if (kind) span.classList.add("kompreni-" + kind);
+            }
+          }
+        });
+        </script>
 kompreni:
   schema: 1
   kind: walkthrough
@@ -73,6 +100,7 @@ Before the commit, the second explanation ran `git diff --stat HEAD`, which list
 ## Code tour {#sec-tour}
 
 The tour follows the flow of a repeat explanation:
+
 1. the skill's instructions (the entry point);
 2. the snapshot script they call;
 3. the line that hands the snapshot to the next explanation;
@@ -80,11 +108,27 @@ The tour follows the flow of a repeat explanation:
 
 The tests come last.
 
+Blocks from files that already existed have a **Before** tab with the matching code at `2385843` and an **After** tab with the code at `c561b3a`, and the lines the commit touched are tinted: yellow where a line changed, green where one was added, red where one was removed. `snapshot.py` and its tests are new, so their blocks have no Before.
+
 ### The skill takes a snapshot and finds its baseline {#sec-tour-skill}
 
 The explain skill is a set of instructions, so its "code" is Markdown. The changes start in the front matter and the argument table.
 
-```{.markdown .numberLines startFrom="4" filename="skills/explain/SKILL.md:4-9"}
+::: {.panel-tabset}
+#### Before
+```{.markdown .numberLines startFrom="4" changed="4,9" filename="skills/explain/SKILL.md:4-9@2385843"}
+argument-hint: "[depth=brief|standard|deep] [level=new-to-programming|new-to-language|intermediate|advanced|<free text>] [branch=<name> [onto=<ref>] | since=<ref> | commit=<ref>] [focus=<path or topic>]" <!-- <1> -->
+---
+
+# Kompreni: explain the changes
+
+Help the user understand not just what changed, but how and why their codebase evolved. Write the explanation **in the conversation**. Create no files. <!-- <2> -->
+```
+1. No `scope` argument: every session-mode explanation covered everything since the last commit.
+2. Create no files, with no exception: nothing was stored between explanations.
+
+#### After
+```{.markdown .numberLines startFrom="4" changed="4,9" filename="skills/explain/SKILL.md:4-9"}
 argument-hint: "[scope=new|all] [depth=brief|standard|deep] [level=new-to-programming|new-to-language|intermediate|advanced|<free text>] [branch=<name> [onto=<ref>] | since=<ref> | commit=<ref>] [focus=<path or topic>]" <!-- <1> -->
 ---
 
@@ -94,24 +138,34 @@ Help the user understand not just what changed, but how and why their codebase e
 ```
 1. `scope=new|all` goes first in the hint shown when typing the command, because it's the argument a repeat explanation is most likely to need.
 2. The skill's promise to create no files gains one stated exception. A snapshot writes git objects into `.git`, but nothing in the working tree, the index or the branches *(code)*.
+:::
 
-```{.markdown .numberLines startFrom="25" filename="skills/explain/SKILL.md:25-26"}
+::: {.panel-tabset}
+#### Before
+```{.markdown .numberLines startFrom="25" filename="skills/explain/SKILL.md:25@2385843"}
+| `focus` | none | A path or topic. Explain only the changes relevant to it | <!-- <1> -->
+```
+1. The argument table ended with `focus`: there was no way to ask for only the new changes.
+
+#### After
+```{.markdown .numberLines startFrom="25" added="26" filename="skills/explain/SKILL.md:25-26"}
 | `focus` | none | A path or topic. Explain only the changes relevant to it |
 | `scope` | `new` | Session mode only. `new`: only what changed since the last Kompreni explanation in this conversation (everything, if there wasn't one). `all`: everything this conversation changed, as one consolidated explanation | <!-- <1> -->
 ```
 1. The new argument. `new` is the default, and "everything, if there wasn't one" makes a first explanation behave as before. It applies only in session mode, because history mode already names its own range.
+:::
 
 Step 2 is where the behaviour changes. The old step started straight with `git diff --stat HEAD`:
 
-::: {.panel-tabset group="before-after"}
-### Before
-```{.markdown .numberLines startFrom="35" filename="skills/explain/SKILL.md:35@2385843"}
+::: {.panel-tabset}
+#### Before
+```{.markdown .numberLines startFrom="35" changed="35" filename="skills/explain/SKILL.md:35@2385843"}
 Run, in one Bash call: `git status --porcelain`, `git diff --stat HEAD`, and `git log --oneline -n 10`. Then: <!-- <1> -->
 ```
 1. One baseline for every explanation: the last commit. In the running example, turn 2's explanation includes the retries option again.
 
-### After
-```{.markdown .numberLines startFrom="36" filename="skills/explain/SKILL.md:36-47"}
+#### After
+```{.markdown .numberLines startFrom="36" changed="47" added="36-46" filename="skills/explain/SKILL.md:36-47"}
 **Take a snapshot first**: `python <skill>/scripts/snapshot.py --repo .` (`python3` if needed). It prints `tree=<sha> head=<sha>` and changes nothing in the working tree, index or branches. It lists any large untracked files it left out on stderr; mention those in the scope note. <!-- <1> -->
 
 **Find the baseline.** Look back in this conversation for the most recent line `Kompreni snapshot: tree=<sha> head=<sha>` from an earlier session-mode explanation. <!-- <2> -->
@@ -265,37 +319,74 @@ if __name__ == "__main__":  # <3>
 
 The snapshot only helps if the *next* explanation can find it. The conversation is the hand-over channel.
 
-```{.markdown .numberLines startFrom="53" filename="skills/explain/SKILL.md:53-54"}
+::: {.panel-tabset}
+#### Before
+```{.markdown .numberLines startFrom="41" changed="41" filename="skills/explain/SKILL.md:41@2385843"}
+- **No git repo**: fall back to what this conversation edited, and state that coverage may be incomplete. <!-- <1> -->
+```
+1. The no-git fallback had no idea of an earlier explanation, and nothing told an explanation to leave a line for the next one.
+
+#### After
+```{.markdown .numberLines startFrom="53" changed="53" added="54" filename="skills/explain/SKILL.md:53-54"}
 - **No git repo**: no snapshot is possible. Fall back to what this conversation edited (since the last explanation, for `scope=new`), and state that coverage may be incomplete. <!-- <1> -->
 - **Record the snapshot.** End every session-mode explanation with the line `Kompreni snapshot: tree=<sha> head=<sha>`, using the new snapshot, so that the next explanation can find it. <!-- <2> -->
 ```
 1. Without git, the old fallback is extended to respect `scope=new`.
 2. The writing side of the hand-over. @sec-tour-skill is the reading side.
+:::
 
 The output guide makes the line part of every explanation's shape:
 
-```{.markdown .numberLines startFrom="13" filename="skills/explain/references/output-guide.md:13"}
+::: {.panel-tabset}
+#### Before
+```{.markdown .numberLines startFrom="13" changed="13" filename="skills/explain/references/output-guide.md:13@2385843"}
+State the depth and the level (see `levels.md`) in a few words at the start, so the user can ask for more or less. <!-- <1> -->
+```
+1. The opening line named the depth and level only. No explanation was ever partial, so there was nothing to say.
+
+#### After
+```{.markdown .numberLines startFrom="13" changed="13" filename="skills/explain/references/output-guide.md:13"}
 State the depth and the level (see `levels.md`) in a few words at the start, so the user can ask for more or less. When the explanation covers only changes since an earlier one (`scope=new`), say so in the same line, e.g. "Changes since the last explanation.". <!-- <1> -->
 ```
 1. The reader is told up front that this explanation is partial.
+:::
 
-```{.markdown .numberLines startFrom="29" filename="skills/explain/references/output-guide.md:29"}
+::: {.panel-tabset}
+#### Before
+```{.markdown .numberLines startFrom="27" filename="skills/explain/references/output-guide.md:27-28@2385843"}
+9. **Worth remembering**: 2-3 takeaways for the reader's mental model, such as "if you change X later, also update Y".
+10. **Not from this session** (session mode): changes present in git that this conversation didn't make, if any. In history mode this is the **Scope** note instead: the resolved range, what was excluded, and whether a PR was found. <!-- <1> -->
+```
+1. The structure ended at item 10. Item 11, the snapshot line, is inserted after it.
+
+#### After
+```{.markdown .numberLines startFrom="29" added="29" filename="skills/explain/references/output-guide.md:29"}
 11. **Snapshot line** (session mode, always the last line, even at `brief` depth): `Kompreni snapshot: tree=<sha> head=<sha>`. The next explanation uses it to cover only what changed since. Keep it exactly in this form. <!-- <1> -->
 ```
 1. "Always the last line, even at `brief`": a short explanation that dropped the line would break the chain. "Keep it exactly in this form", because the reading side searches for this exact text.
+:::
 
-```{.markdown .numberLines startFrom="33" filename="skills/explain/references/output-guide.md:33"}
+::: {.panel-tabset}
+#### Before
+```{.markdown .numberLines startFrom="32" changed="32" filename="skills/explain/references/output-guide.md:32@2385843"}
+A short paragraph: purpose, before and after, why (labelled if it isn't obvious), and verification. No headings. Instead of a concepts section, gloss at most two concepts in parentheses at first mention (see `levels.md`). <!-- <1> -->
+```
+1. The brief format ended at "No headings", with no closing line to keep.
+
+#### After
+```{.markdown .numberLines startFrom="33" changed="33" filename="skills/explain/references/output-guide.md:33"}
 A short paragraph: purpose, before and after, why (labelled if it isn't obvious), and verification. No headings, but still end with the snapshot line. Instead of a concepts section, gloss at most two concepts in parentheses at first mention (see `levels.md`). <!-- <1> -->
 ```
 1. The brief format, which otherwise has no structure, is told explicitly to keep the line.
+:::
 
 ### The mod counts across turns {#sec-tour-mod}
 
 The mod can't read snapshots. It tracks the same idea, "what's unexplained", from Claude Code's events. Its declared state changes first:
 
-::: {.panel-tabset group="before-after"}
-### Before
-```{.typescript .numberLines startFrom="1" filename="mods/kompreni-offer/types/index.d.ts:1-11@2385843"}
+::: {.panel-tabset}
+#### Before
+```{.typescript .numberLines startFrom="1" changed="2,9" removed="1,3-5" filename="mods/kompreni-offer/types/index.d.ts:1-11@2385843"}
 /** The offer shown after a turn that edited files. */
 export type Offer = {  // <1>
   /** Paths edited during the turn, by the main loop or its subagents. */
@@ -310,8 +401,8 @@ declare module 'claude-code' {
 ```
 1. One piece of state: the offer for the turn that just ended, or `null`.
 
-### After
-```{.typescript .numberLines startFrom="1" filename="mods/kompreni-offer/types/index.d.ts:1-15"}
+#### After
+```{.typescript .numberLines startFrom="1" changed="2,6" added="1,7-13" filename="mods/kompreni-offer/types/index.d.ts:1-15"}
 /** Marks this file as a module so the declaration below augments 'claude-code'. */  // <1>
 export type KompreniOfferFiles = string[]  // <1>
 
@@ -334,22 +425,53 @@ declare module 'claude-code' {
 4. Only changes the wording: "in this conversation" before the first explanation, "since the last explanation" after.
 :::
 
-```{.typescript .numberLines startFrom="4" filename="mods/kompreni-offer/hooks/register.tsx:4-7"}
+::: {.panel-tabset}
+#### Before
+```{.typescript .numberLines startFrom="4" changed="7" removed="4-6" filename="mods/kompreni-offer/hooks/register.tsx:4-7@2385843"}
+import type { Offer } from '../types'  // <1>
+
+// The offer for the turn that just ended; null when there is nothing to offer.  // <2>
+const pending = atom({ plugin: 'kompreni-offer', key: 'pending' } as const, null)  // <2>
+```
+1. The `Offer` type, which the change removes (see the types tabs above).
+2. The only state: the offer for the turn that just ended, or `null`.
+
+#### After
+```{.typescript .numberLines startFrom="4" changed="7" added="4-6" filename="mods/kompreni-offer/hooks/register.tsx:4-7"}
 // Session state: files edited since the last explanation, and whether to show the row.  // <1>
 const sinceExplain = atom({ plugin: 'kompreni-offer', key: 'sinceExplain' } as const, [])  // <1>
 const isVisible = atom({ plugin: 'kompreni-offer', key: 'isVisible' } as const, false)  // <1>
 const hasExplained = atom({ plugin: 'kompreni-offer', key: 'hasExplained' } as const, false)  // <1>
 ```
 1. The three typed pieces of session state declared above, each with its starting value. Atoms are per session: a new session starts with an empty count, as the skill's baseline does.
+:::
 
-```{.typescript .numberLines startFrom="20" filename="mods/kompreni-offer/hooks/register.tsx:20-22"}
+::: {.panel-tabset}
+#### Before
+```{.typescript .numberLines startFrom="20" filename="mods/kompreni-offer/hooks/register.tsx:20@2385843"}
+const EDIT_TOOLS = new Set(['Edit', 'Write', 'NotebookEdit'])  // <1>
+```
+1. No pattern for history-mode arguments: the mod never needed to recognise an explanation run.
+
+#### After
+```{.typescript .numberLines startFrom="20" added="21-22" filename="mods/kompreni-offer/hooks/register.tsx:20-22"}
 const EDIT_TOOLS = new Set(['Edit', 'Write', 'NotebookEdit'])
 // History-mode runs explain a branch or commits, not this session's edits.  // <1>
 const HISTORY_ARGS = /\b(branch|since|commit)=/  // <1>
 ```
 1. An explanation of a branch or a commit says nothing about this session's edits, so it mustn't reset the count. `\b` stops it matching inside a longer argument name.
+:::
 
-```{.typescript .numberLines startFrom="53" filename="mods/kompreni-offer/hooks/register.tsx:53-65"}
+::: {.panel-tabset}
+#### Before
+```{.typescript .numberLines startFrom="48" filename="mods/kompreni-offer/hooks/register.tsx:48-49@2385843"}
+  return KNOWN_COMMANDS.find(name => names.has(name))
+}  // <1>
+```
+1. `resolveCommand` ended here and `register` followed. Nothing checked whether an explanation had run.
+
+#### After
+```{.typescript .numberLines startFrom="53" added="53-65" filename="mods/kompreni-offer/hooks/register.tsx:53-65"}
 /** Whether a run of `name` with `args` is a session-mode Kompreni explanation. */  // <1>
 async function isSessionExplain($: EngineInterface, name: string, args: string): Promise<boolean> {  // <1>
   const chosen = await $.store.get(COMMAND)  // <1>
@@ -366,20 +488,33 @@ async function markExplained($: EngineInterface): Promise<void> {  // <2>
 ```
 1. One test, used by two routes: the user typing the command and Claude invoking the skill. It accepts the known names and any name the user set with `command=`, and it rejects history-mode runs.
 2. What "an explanation ran" means for the mod: the count empties, the row hides, and the wording switches to "since the last explanation". The skill's snapshot does the same job in git.
+:::
 
-```{.typescript .numberLines startFrom="67" filename="mods/kompreni-offer/hooks/register.tsx:67-70"}
+::: {.panel-tabset}
+#### Before
+```{.typescript .numberLines startFrom="51" changed="53" removed="52,54" filename="mods/kompreni-offer/hooks/register.tsx:51-54@2385843"}
+export const register: Register = on => {
+  // Module variable: the files edited since the last prompt. A reload resets it,  // <1>
+  // which at worst skips one offer.  // <1>
+  let edited = new Set<string>()  // <1>
+```
+1. A per-turn set of edited paths, emptied at every prompt: the whole of the mod's memory.
+
+#### After
+```{.typescript .numberLines startFrom="67" changed="69" added="68,70" filename="mods/kompreni-offer/hooks/register.tsx:67-70"}
 export const register: Register = on => {
   // Edits in the current turn, so an offer appears only after a turn that changed something.  // <1>
   // A reload resets it, which at worst skips one offer.  // <1>
   let turnEdits = 0  // <1>
 ```
 1. A per-turn counter remains, but now only to decide whether *this* turn earns a row. It's a plain variable, not an atom, because losing it on a reload costs at most one offer *(code)*.
+:::
 
 The four hooks, in the order a turn runs them:
 
-::: {.panel-tabset group="before-after"}
-### Before
-```{.typescript .numberLines startFrom="65" filename="mods/kompreni-offer/hooks/register.tsx:65-69@2385843"}
+::: {.panel-tabset}
+#### Before
+```{.typescript .numberLines startFrom="65" changed="67" removed="66" filename="mods/kompreni-offer/hooks/register.tsx:65-69@2385843"}
   on('prompt.submit', async ($, e, next) => {
     edited = new Set()  // <1>
     await update($, pending, () => null)  // <1>
@@ -388,8 +523,8 @@ The four hooks, in the order a turn runs them:
 ```
 1. Every prompt wiped the record. That's why turn 2 of the running example started with an empty count.
 
-### After
-```{.typescript .numberLines startFrom="81" filename="mods/kompreni-offer/hooks/register.tsx:81-88"}
+#### After
+```{.typescript .numberLines startFrom="81" changed="83" added="82,84-86" filename="mods/kompreni-offer/hooks/register.tsx:81-88"}
   on('prompt.submit', async ($, e, next) => {
     turnEdits = 0  // <1>
     await update($, isVisible, () => false)  // <1>
@@ -403,9 +538,9 @@ The four hooks, in the order a turn runs them:
 2. Route one: the user typed `/kompreni:explain` (or pressed Enter on a filled-in one). The count resets when the explanation actually runs, not when the button fills the prompt.
 :::
 
-::: {.panel-tabset group="before-after"}
-### Before
-```{.typescript .numberLines startFrom="71" filename="mods/kompreni-offer/hooks/register.tsx:71-79@2385843"}
+::: {.panel-tabset}
+#### Before
+```{.typescript .numberLines startFrom="71" changed="73-74,76" filename="mods/kompreni-offer/hooks/register.tsx:71-79@2385843"}
   on('tool.call', async ($, e, next) => {
     const ran = await next(e)
     if (EDIT_TOOLS.has(e.tool) && ran.deny === undefined && ran.isError !== true) {  // <1>
@@ -418,8 +553,8 @@ The four hooks, in the order a turn runs them:
 ```
 1. Only edits were watched, into a per-turn set.
 
-### After
-```{.typescript .numberLines startFrom="90" filename="mods/kompreni-offer/hooks/register.tsx:90-104"}
+#### After
+```{.typescript .numberLines startFrom="90" changed="92-93,96" added="94,97-101" filename="mods/kompreni-offer/hooks/register.tsx:90-104"}
   on('tool.call', async ($, e, next) => {
     const ran = await next(e)
     if (ran.deny !== undefined || ran.isError === true) return ran  // <1>
@@ -442,7 +577,24 @@ The four hooks, in the order a turn runs them:
 4. Route two: Claude invoked the explain skill itself, for example after "walk me through what you changed". Without this, asking in words would never reset the count.
 :::
 
-```{.typescript .numberLines startFrom="106" filename="mods/kompreni-offer/hooks/register.tsx:106-114"}
+::: {.panel-tabset}
+#### Before
+```{.typescript .numberLines startFrom="81" changed="85,87" removed="86" filename="mods/kompreni-offer/hooks/register.tsx:81-90@2385843"}
+  on('turn.complete', async ($, e, next) => {
+    const done = await next(e)
+    const isMainAnswer = e.agentId === undefined && e.reason === 'answer'
+    const isEnabled = text(await $.store.get(ENABLED), 'on') === 'on'
+    if (isMainAnswer && isEnabled && edited.size > 0) {  // <1>
+      const offer: Offer = { files: [...edited] }  // <1>
+      await update($, pending, () => offer)  // <1>
+    }
+    return done
+  }).catch(($, e, next) => next(e))
+```
+1. The offer was this turn's edited files, stored in `pending` when the turn ended.
+
+#### After
+```{.typescript .numberLines startFrom="106" changed="110-111" filename="mods/kompreni-offer/hooks/register.tsx:106-114"}
   on('turn.complete', async ($, e, next) => {
     const done = await next(e)
     const isMainAnswer = e.agentId === undefined && e.reason === 'answer'
@@ -454,10 +606,27 @@ The four hooks, in the order a turn runs them:
   }).catch(($, e, next) => next(e))
 ```
 1. At the end of a main-conversation turn that edited something, the row is shown. The count it shows is the whole `sinceExplain` list, not just this turn. In the running example, turn 2's `sed` made no Edit calls, so `turnEdits` is 0 and no row appears (see @sec-limitations).
+:::
 
 The settings command reports the count too:
 
-```{.typescript .numberLines startFrom="127" filename="mods/kompreni-offer/hooks/register.tsx:127-137"}
+::: {.panel-tabset}
+#### Before
+```{.typescript .numberLines startFrom="103" filename="mods/kompreni-offer/hooks/register.tsx:103-111@2385843"}
+    const command = (await resolveCommand($)) ?? 'not found (set command=)'
+    const lines = [
+      `Kompreni offer: ${text(await $.store.get(ENABLED), 'on')}`,
+      `depth: ${text(await $.store.get(DEPTH), 'auto')}`,
+      `level: ${text(await $.store.get(LEVEL), 'auto')}`,
+      `command: /${command}`,  // <1>
+      ...errors,
+    ]
+    return { text: lines.join('\n') }
+```
+1. The settings report had no count.
+
+#### After
+```{.typescript .numberLines startFrom="127" added="128,134" filename="mods/kompreni-offer/hooks/register.tsx:127-137"}
     const command = (await resolveCommand($)) ?? 'not found (set command=)'
     const pending = (await read($, sinceExplain)).length  // <1>
     const lines = [
@@ -471,10 +640,28 @@ The settings command reports the count too:
     return { text: lines.join('\n') }
 ```
 1. `/kompreni-offer` with no arguments now shows how many files are waiting to be explained.
+:::
 
 And the row reads the new state:
 
-```{.typescript .numberLines startFrom="140" filename="mods/kompreni-offer/hooks/register.tsx:140-149"}
+::: {.panel-tabset}
+#### Before
+```{.typescript .numberLines startFrom="114" changed="115-116,122" filename="mods/kompreni-offer/hooks/register.tsx:114-122@2385843"}
+  on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
+    const offer = await read($, pending)  // <1>
+    if (e.props.hasSurvey || offer === null) return next(e)  // <1>
+
+    const depth = text(await $.store.get(DEPTH), 'auto')
+    const level = text(await $.store.get(LEVEL), 'auto')
+    const levels = LEVELS.includes(level) ? LEVELS : [...LEVELS, level]
+    const { Box, Button, Select, Text } = $.ui.resolve(e)
+    const n = offer.files.length  // <2>
+```
+1. The row drew whenever an offer was pending.
+2. Its number was the turn's own edits.
+
+#### After
+```{.typescript .numberLines startFrom="140" changed="141-142,149" added="147" filename="mods/kompreni-offer/hooks/register.tsx:140-149"}
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     const files = await read($, sinceExplain)  // <1>
     if (e.props.hasSurvey || !(await read($, isVisible)) || files.length === 0) return next(e)  // <1>
@@ -488,8 +675,22 @@ And the row reads the new state:
 ```
 1. The row draws only when it's visible *and* something is unexplained, and its number is the running count.
 2. The wording that `hasExplained` exists for.
+:::
 
-```{.typescript .numberLines startFrom="162" filename="mods/kompreni-offer/hooks/register.tsx:162-168"}
+::: {.panel-tabset}
+#### Before
+```{.typescript .numberLines startFrom="135" changed="139" filename="mods/kompreni-offer/hooks/register.tsx:135-140@2385843"}
+      // Read the settings now, not the values captured when the band was drawn.
+      const chosenDepth = text(await $.store.get(DEPTH), 'auto')
+      const chosenLevel = text(await $.store.get(LEVEL), 'auto')
+      const filled = await $.prompt.fill({ text: buildPrompt(command, chosenDepth, chosenLevel) })
+      if (filled.isFilled) await update($, pending, () => null)  // <1>
+    }
+```
+1. Filling in the command threw the offer away, even if the user then deleted the command unsent.
+
+#### After
+```{.typescript .numberLines startFrom="162" changed="167" added="166" filename="mods/kompreni-offer/hooks/register.tsx:162-168"}
       // Read the settings now, not the values captured when the band was drawn.
       const chosenDepth = text(await $.store.get(DEPTH), 'auto')
       const chosenLevel = text(await $.store.get(LEVEL), 'auto')
@@ -499,19 +700,41 @@ And the row reads the new state:
     }
 ```
 1. Filling in the command only hides the row. If the user then deletes the command instead of sending it, the files are still counted. A test pins this down.
+:::
 
-```{.typescript .numberLines startFrom="172" filename="mods/kompreni-offer/hooks/register.tsx:172-174"}
+::: {.panel-tabset}
+#### Before
+```{.typescript .numberLines startFrom="144" changed="145" filename="mods/kompreni-offer/hooks/register.tsx:144-146@2385843"}
+        <Text dimColor>
+          Kompreni: {n} file{n === 1 ? '' : 's'} changed.  // <1>
+        </Text>
+```
+1. One wording only: nothing said whether an explanation had already run.
+
+#### After
+```{.typescript .numberLines startFrom="172" changed="173" filename="mods/kompreni-offer/hooks/register.tsx:172-174"}
         <Text dimColor>
           Kompreni: {n} file{n === 1 ? '' : 's'} changed {since}.  // <1>
         </Text>
 ```
 1. For example, "Kompreni: 2 files changed since the last explanation."
+:::
 
-```{.typescript .numberLines startFrom="189" filename="mods/kompreni-offer/hooks/register.tsx:189-190"}
+::: {.panel-tabset}
+#### Before
+```{.typescript .numberLines startFrom="161" changed="162" filename="mods/kompreni-offer/hooks/register.tsx:161-162@2385843"}
+        <Button key="explain" label="Explain" onPress={() => void explain()} />
+        <Button key="dismiss" label="Dismiss" onPress={() => void update($, pending, () => null)} />  // <1>
+```
+1. Dismiss threw the offer away for good.
+
+#### After
+```{.typescript .numberLines startFrom="189" changed="190" filename="mods/kompreni-offer/hooks/register.tsx:189-190"}
         <Button key="explain" label="Explain" onPress={() => void explain()} />
         <Button key="dismiss" label="Dismiss" onPress={() => void update($, isVisible, () => false)} />  // <1>
 ```
 1. Dismiss now only hides the row. It used to throw the offer away; now the count survives until an explanation runs.
+:::
 
 ### Tests {#sec-tour-tests}
 

@@ -28,24 +28,43 @@ Reads the draft from stdin (or --file) and checks it against the repository:
   marker, and an item can't have a second paragraph (Quarto drops it). These
   are errors, because Quarto mostly fails silently. Outside .qmd, markers
   are a warning. ``.numberLines`` needs ``startFrom`` equal to the first line.
+* Before/After tabsets (.qmd only): a ``.panel-tabset`` with a ``Before`` or
+  ``After`` tab must have exactly those two tabs, in that order. Verbatim
+  blocks in Before need an ``@<ref>``, and blocks in After must not have one.
+  A ``group=`` on such a tabset is a warning, because linked tabsets make the
+  page jump when one is switched.
+* Line marks on a block, in the file's line numbers: ``changed="33-34"``
+  (modified: the line has a counterpart on the other side), ``added="40"``
+  (at the tip only) and ``removed="12"`` (in an ``@<ref>`` block only). They
+  need ``.numberLines startFrom``, must be inside the caption's range, and
+  can't overlap. ``line_kinds`` works them out from the diff: within each
+  hunk, old and new lines are paired by similarity, in order; paired lines
+  are changed, the rest removed or added.
 * ``--coverage BASE[..TIP]`` lists the changed lines that no verbatim snippet
   shows (new-side lines against snippets at the tip; deletion-only hunks
   against ``@<ref>`` snippets), as notes that don't change the exit status.
+  It also notes blocks outside callouts that show changed lines of a file
+  that existed at BASE but aren't in a Before/After tabset, and blocks in
+  such a tabset whose marks don't match the diff.
+* Paths may be dotfiles (``.gitattributes:1-3``); a leading ``./`` is ignored.
 
 Exit status: 0 = no errors (warnings allowed), 1 = errors, 2 = bad usage.
 Standard library only; needs git on PATH only for ``@<ref>``, ``--ref`` and
 permalinks.
 """
 import argparse
+import difflib
 import re
 import subprocess
 import sys
 from pathlib import Path
 
-LOC = re.compile(r"^(?P<path>[^\s:@]+\.\w+):(?P<a>\d+)(?:-(?P<b>\d+))?(?:@(?P<ref>\S+))?$")
+LOC = re.compile(r"^(?P<path>[^\s:@]*\.\w+):(?P<a>\d+)(?:-(?P<b>\d+))?(?:@(?P<ref>\S+))?$")
 LINK = re.compile(r"\]\((?P<path>[^)\s#]+)#L(?P<a>\d+)(?:-L?(?P<b>\d+))?\)")
 PERMALINK = re.compile(r"^https?://[^/]+/[^/]+/[^/]+/blob/(?P<ref>[^/]+)/(?P<path>.+)$")
-PLAIN = re.compile(r"(?<![\w/\.@(#-])(?P<path>[\w./\-]+\.[A-Za-z]\w{0,7}):(?P<a>\d+)(?:-(?P<b>\d+))?(?![\w@])")
+# A path with an extension (src/api.py), or a dotfile (.gitattributes, src/.eslintrc.json), then :line[-line].
+PLAIN = re.compile(r"(?<![\w/\.@(#-])(?P<path>(?:[\w./\-]*/)?\.[A-Za-z][\w.\-]*|[\w./\-]+\.[A-Za-z]\w{0,7})"
+                   r":(?P<a>\d+)(?:-(?P<b>\d+))?(?![\w@])")
 MDLINK = re.compile(r"\[[^\]]*\]\([^)]*\)")
 FENCE = re.compile(r"^(\s*)(`{3,}|~{3,})(.*)$")
 ATTR = re.compile(r'([\w-]+)\s*=\s*(?:"([^"]*)"|([^\s"}]+))')
@@ -58,11 +77,40 @@ LIST_ITEM = re.compile(r"^(\d+)\.\s+(.*)$")
 BLOCK_START = re.compile(r"^([-*+](\s|$)|\d+[.)](\s|$)|[A-Za-z][.)](\s|$)|#{1,6}\s|>)")
 HUNK = re.compile(r"^@@ -(?P<oa>\d+)(?:,(?P<ob>\d+))? \+(?P<na>\d+)(?:,(?P<nb>\d+))? @@")
 SKETCH_LANGS = ("text", "ascii", "diff-illustrative")
+DIV = re.compile(r"^(:{3,})\s*(.*?)\s*$")
+HEADING = re.compile(r"^(#{1,6})\s+(.*?)\s*(?:\{[^}]*\})?\s*$")
+MARKS = re.compile(r"^\s*\d+(?:-\d+)?(?:\s*,\s*\d+(?:-\d+)?)*\s*$")
+MARK_KINDS = ("changed", "added", "removed")  # attribute names, in the order they're written
+SIMILAR = 0.5  # difflib ratio at which an old and a new line count as the same line, changed
+
+
+def clean_path(path):
+    """Repo-relative path with forward slashes and no leading ./"""
+    path = path.replace("\\", "/")
+    while path.startswith("./"):
+        path = path[2:]
+    return path
+
+
+def parse_marks(spec):
+    """'33-34, 40' -> {33, 34, 40}; None if malformed."""
+    if not MARKS.match(spec):
+        return None
+    out = set()
+    for part in spec.split(","):
+        a, _, b = part.strip().partition("-")
+        out.update(range(int(a), int(b or a) + 1))
+    return out
+
+
+def fmt_marks(numbers):
+    """{33, 34, 40} -> '33-34,40'"""
+    return ",".join(fmt_range(a, b) for a, b in runs(sorted(numbers)))
 
 
 def read_lines(repo, path, ref):
     """Return the file's lines, or None if it can't be read."""
-    path = path.replace("\\", "/")
+    path = clean_path(path)
     if ref:
         try:
             out = subprocess.run(["git", "-C", str(repo), "show", f"{ref}:{path}"],
@@ -186,33 +234,195 @@ def check_annotations(body, lines, after, where, is_qmd, errors, warnings):
         errors.append(f"{where}: list item(s) {', '.join(map(str, extra))} have no marker in the block")
 
 
-def changed_ranges(repo, spec):
-    """Hunks of `git diff -U0 <base> [<tip>]` for spec 'base' or 'base..tip'.
+def diff_files(repo, spec, paths=()):
+    """Parse `git diff -U0 <base> [<tip>]` for spec 'base' or 'base..tip'.
 
-    Returns (added, removed): added maps path -> list of (a, b) new-side line ranges;
-    removed maps path -> list of (a, b, after) old-side ranges of deletion-only hunks.
+    Returns a list of {"old": path or None, "new": path or None, "hunks": [(oa, ob, na, nb)]}.
+    "old" is None for a file added since base, "new" for one deleted. In a hunk, ob == 0 means
+    lines were inserted after old line oa, and nb == 0 means old lines were deleted after new line na.
     """
     base, _, tip = spec.partition("..")
-    cmd = ["git", "-C", str(repo), "diff", "-U0", "--no-color", "--no-ext-diff", base] + ([tip] if tip else []) + ["--"]
+    cmd = (["git", "-C", str(repo), "diff", "-U0", "--no-color", "--no-ext-diff", base]
+           + ([tip] if tip else []) + ["--"] + [clean_path(p) for p in paths])
     out = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", check=True).stdout
-    added, removed = {}, {}
-    old_path = new_path = None
+    files = []
     for line in out.splitlines():
-        if line.startswith("--- "):
-            old_path = None if line[4:] == "/dev/null" else line[4:].removeprefix("a/")
-        elif line.startswith("+++ "):
-            new_path = None if line[4:] == "/dev/null" else line[4:].removeprefix("b/")
-        elif line.startswith("@@"):
+        if line.startswith("diff --git "):
+            files.append({"old": None, "new": None, "hunks": []})
+        elif line.startswith("--- ") and files:
+            files[-1]["old"] = None if line[4:] == "/dev/null" else line[4:].removeprefix("a/")
+        elif line.startswith("+++ ") and files:
+            files[-1]["new"] = None if line[4:] == "/dev/null" else line[4:].removeprefix("b/")
+        elif line.startswith("@@") and files:
             h = HUNK.match(line)
-            if not h:
-                continue
-            oa, ob = int(h["oa"]), int(h["ob"] or 1)
-            na, nb = int(h["na"]), int(h["nb"] or 1)
-            if nb > 0 and new_path:
-                added.setdefault(new_path, []).append((na, na + nb - 1))
-            elif ob > 0 and (old_path or new_path):
-                removed.setdefault(old_path or new_path, []).append((oa, oa + ob - 1, na))
+            if h:
+                files[-1]["hunks"].append((int(h["oa"]), int(h["ob"] or 1), int(h["na"]), int(h["nb"] or 1)))
+    return files
+
+
+def changed_ranges(files):
+    """From diff_files(): (added, removed). added maps path -> list of (a, b) new-side line ranges;
+    removed maps path -> list of (a, b, after) old-side ranges of deletion-only hunks."""
+    added, removed = {}, {}
+    for f in files:
+        for oa, ob, na, nb in f["hunks"]:
+            if nb > 0 and f["new"]:
+                added.setdefault(f["new"], []).append((na, na + nb - 1))
+            elif ob > 0 and (f["old"] or f["new"]):
+                removed.setdefault(f["old"] or f["new"], []).append((oa, oa + ob - 1, na))
     return added, removed
+
+
+def pair_lines(old, new):
+    """Order-preserving pairs (i, j) of similar lines from two lists, maximising total similarity."""
+    if not old or not new or len(old) * len(new) > 40000:
+        return []  # nothing to pair, or a hunk too big to align: leave it as removed + added
+    sim = [[0.0] * len(new) for _ in old]
+    for i, a in enumerate(old):
+        for j, b in enumerate(new):
+            a2, b2 = a.strip(), b.strip()
+            if a2 and b2:
+                r = difflib.SequenceMatcher(None, a2, b2, autojunk=False).ratio()
+                sim[i][j] = r if r >= SIMILAR else 0.0
+    score = [[0.0] * (len(new) + 1) for _ in range(len(old) + 1)]
+    for i in range(1, len(old) + 1):
+        for j in range(1, len(new) + 1):
+            s = sim[i - 1][j - 1]
+            score[i][j] = max(score[i - 1][j], score[i][j - 1], score[i - 1][j - 1] + s if s else 0.0)
+    pairs, i, j = [], len(old), len(new)
+    while i and j:
+        s = sim[i - 1][j - 1]
+        if s and score[i][j] == score[i - 1][j - 1] + s:
+            pairs.append((i - 1, j - 1))
+            i, j = i - 1, j - 1
+        elif score[i][j] == score[i - 1][j]:
+            i -= 1
+        else:
+            j -= 1
+    return pairs[::-1]
+
+
+def line_kinds(hunks, old_text, new_text):
+    """Classify a file's diff lines. Returns (old, new): dicts of line number -> kind, where an old
+    line is "removed" or "changed" and a new line "added" or "changed". Within each hunk, old and new
+    lines are paired by similarity (pair_lines); a paired line is "changed" on both sides."""
+    old, new = {}, {}
+    for oa, ob, na, nb in hunks:
+        olds = list(range(oa, oa + ob)) if ob else []
+        news = list(range(na, na + nb)) if nb else []
+        old.update((n, "removed") for n in olds)
+        new.update((n, "added") for n in news)
+        if (olds and news and old_text and new_text
+                and olds[-1] <= len(old_text) and news[-1] <= len(new_text)):
+            for i, j in pair_lines([old_text[n - 1] for n in olds], [new_text[n - 1] for n in news]):
+                old[olds[i]] = new[news[j]] = "changed"
+    return old, new
+
+
+def fmt_kinds(kinds, span):
+    """{line: kind} -> 'changed="5" added="6-8"' for the lines in span (empty string if none)."""
+    parts = []
+    for kind in MARK_KINDS:
+        lines = {n for n in span if kinds.get(n) == kind}
+        if lines:
+            parts.append(f'{kind}="{fmt_marks(lines)}"')
+    return " ".join(parts)
+
+
+def track_div(line, n, stack, closed):
+    """Follow Pandoc fenced divs (::: {...} ... :::) and the tab headings of .panel-tabset divs."""
+    d = DIV.match(line)
+    if d:
+        head = d.group(2)
+        if head:
+            kind = "tabset" if ".panel-tabset" in head else "callout" if ".callout" in head else "div"
+            stack.append({"kind": kind, "line": n, "head": head, "level": None, "tabs": [], "blocks": []})
+        elif stack:
+            closed.append(stack.pop())
+        return
+    h = HEADING.match(line)
+    if h and stack and stack[-1]["kind"] == "tabset":
+        tabset, level = stack[-1], len(h.group(1))
+        if tabset["level"] is None:
+            tabset["level"] = level
+        if level == tabset["level"]:
+            tabset["tabs"].append(h.group(2))
+
+
+def is_before_after(div):
+    return div is not None and div["kind"] == "tabset" and any(t.lower() in ("before", "after") for t in div["tabs"])
+
+
+def check_tabsets(divs, errors, warnings):
+    """Before/After tabsets: exactly the tabs Before then After, old code only in Before, no group."""
+    for t in divs:
+        if not is_before_after(t):
+            continue
+        where = f"line {t['line']}"
+        if re.search(r"\bgroup\s*=", t["head"]):
+            warnings.append(f"{where}: Before/After tabset has a `group`, which links it to every other tabset "
+                            "in the group: switching one resizes the others and the page jumps. Remove it")
+        if t["tabs"] != ["Before", "After"]:
+            errors.append(f"{where}: Before/After tabset has tabs {t['tabs']}; use exactly `Before` then `After`")
+        for tab, block_where, has_ref in t["blocks"]:
+            if tab == "Before" and not has_ref:
+                errors.append(f"{block_where}: a block in a Before tab shows old code: add `@<base>` to its caption")
+            if tab == "After" and has_ref:
+                errors.append(f"{block_where}: a block in an After tab shows the code at the tip: "
+                              "remove the `@<ref>` from its caption")
+        if "Before" in t["tabs"] and not any(tab == "Before" for tab, _, _ in t["blocks"]):
+            warnings.append(f"{where}: the Before tab has no verbatim `@<base>` block")
+
+
+def mark_notes(repo, files, base, tip, blocks):
+    """--coverage notes (.qmd): blocks of a file that existed at base, showing changed lines outside a
+    Before/After tabset (or callout); and blocks in such a tabset whose marks don't match the diff."""
+    by_new = {f["new"]: f for f in files if f["new"]}
+    by_old = {f["old"]: f for f in files if f["old"]}
+    shas, kinds_cache = {}, {}
+
+    def kinds(f):
+        key = (f["old"], f["new"])
+        if key not in kinds_cache:
+            old_text = read_lines(repo, f["old"], base) if f["old"] else None
+            new_text = read_lines(repo, f["new"], tip) if f["new"] else None
+            kinds_cache[key] = line_kinds(f["hunks"], old_text, new_text)
+        return kinds_cache[key]
+
+    def rev(ref):
+        if ref not in shas:
+            p = subprocess.run(["git", "-C", str(repo), "rev-parse", "--verify", "-q", ref + "^{commit}"],
+                               capture_output=True, text=True)
+            shas[ref] = p.stdout.strip() if p.returncode == 0 else None
+        return shas[ref]
+
+    notes = []
+    for blk in blocks:
+        in_tabs = is_before_after(blk["tabset"])
+        span = range(blk["a"], blk["b"] + 1)
+        if blk["ref"]:
+            f = by_old.get(blk["path"])
+            if not in_tabs or f is None or rev(blk["ref"]) is None or rev(blk["ref"]) != rev(base):
+                continue
+            diff = kinds(f)[0]
+        else:
+            f = by_new.get(blk["path"])
+            if f is None:
+                continue
+            diff = kinds(f)[1]
+        want = {n: diff[n] for n in span if n in diff}
+        if not blk["ref"] and not in_tabs:
+            if f["old"] and want and not blk["in_callout"]:
+                notes.append(f"{blk['where']}: {blk['path']} existed at {base} and this block shows changed lines, "
+                             "so it belongs in a Before/After tabset")
+            continue
+        filled = {n for n in span if blk["lines"][n - blk["a"]].strip()}  # blank lines may go either way
+        have = {n: k for n, k in blk["marks"].items() if n in span}
+        if {n: k for n, k in want.items() if n in filled} != {n: k for n, k in have.items() if n in filled}:
+            hint = fmt_kinds(want, span) or "no changed lines"
+            notes.append(f"{blk['where']}: the diff gives {hint}"
+                         + (f" (the block has {fmt_kinds(have, span)})" if have else " (the block has none)"))
+    return notes
 
 
 def uncovered(a, b, shown):
@@ -278,11 +488,15 @@ def main():
     prose = []
     checked_blocks = 0
     shown_new, shown_old = {}, {}  # path -> [(a, b)] shown at the tip / at an explicit @ref
+    stack, divs = [], []  # open and closed fenced divs (.qmd)
+    blocks = []  # verbatim blocks, for --coverage: dicts with where, path, a, b, ref, marks, lines, tabset, in_callout
     lines = text.splitlines()
     i = front_matter_end(lines)
     while i < len(lines):
         m = FENCE.match(lines[i])
         if not m:
+            if is_qmd:
+                track_div(lines[i], i + 1, stack, divs)
             prose.append((i + 1, lines[i]))
             i += 1
             continue
@@ -314,15 +528,42 @@ def main():
             warnings.append(f"{where}: code block has no location (add `path:LINE-LINE` or mark it `illustrative`)")
             continue
         attrs = braced_attrs(info)
+        path = clean_path(loc["path"])
+        a, b = int(loc["a"]), int(loc["b"] or loc["a"])
         if ".numberLines" in info and attrs.get("startFrom", "1") != loc["a"]:
             errors.append(f"{where}: .numberLines needs startFrom=\"{loc['a']}\" so the numbers match the file")
+        marks = {}  # line -> kind
+        for kind in MARK_KINDS:
+            if kind not in attrs:
+                continue
+            lines_ = parse_marks(attrs[kind])
+            if lines_ is None:
+                errors.append(f"{where}: {kind}=\"{attrs[kind]}\" should be line numbers and ranges, like \"33-34,40\"")
+            elif ".numberLines" not in info or "startFrom" not in attrs:
+                errors.append(f"{where}: {kind}= needs .numberLines and startFrom=\"{loc['a']}\": "
+                              "the marks use the file's line numbers")
+            elif any(n < a or n > b for n in lines_):
+                errors.append(f"{where}: {kind}=\"{attrs[kind]}\" marks lines outside {path}:{fmt_range(a, b)}")
+            elif kind == "added" and loc["ref"]:
+                errors.append(f"{where}: added= in a block of old code (`@{loc['ref']}`); "
+                              "old code has removed= and changed= lines")
+            elif kind == "removed" and not loc["ref"]:
+                errors.append(f"{where}: removed= in a block of current code; current code has added= and changed= lines")
+            elif any(n in marks for n in lines_):
+                errors.append(f"{where}: {kind}= overlaps another mark: a line has one kind")
+            else:
+                marks.update((n, kind) for n in lines_)
+        tabset = next((d for d in reversed(stack) if d["kind"] == "tabset"), None)
+        if tabset is not None:
+            tabset["blocks"].append((tabset["tabs"][-1] if tabset["tabs"] else None, where, bool(loc["ref"])))
         ref = loc["ref"] or args.ref
-        expected = check_range(repo, loc["path"], loc["a"], loc["b"], ref, where, errors)
+        expected = check_range(repo, path, loc["a"], loc["b"], ref, where, errors)
         if expected is None:
             continue
         checked_blocks += 1
-        a, b = int(loc["a"]), int(loc["b"] or loc["a"])
-        (shown_old if loc["ref"] else shown_new).setdefault(loc["path"], []).append((a, b))
+        (shown_old if loc["ref"] else shown_new).setdefault(path, []).append((a, b))
+        blocks.append({"where": where, "path": path, "a": a, "b": b, "ref": loc["ref"], "marks": marks,
+                       "lines": expected, "tabset": tabset, "in_callout": any(d["kind"] == "callout" for d in stack)})
         if norm(body, strip_annotations=True) != norm(expected):
             errors.append(f"{where}: snippet does not match {loc['path']}:{loc['a']}-{loc['b'] or loc['a']}"
                           + (f"@{ref}" if ref else "")
@@ -349,14 +590,21 @@ def main():
             refs += 1
             check_range(repo, path, a, b, ref, f"line {n}", errors)
 
-    notes = []
+    divs += stack  # unclosed divs still count
+    check_tabsets(divs, errors, warnings)
+
+    notes, tab_notes = [], []
     if args.coverage:
         try:
-            added, removed = changed_ranges(repo, args.coverage)
+            files = diff_files(repo, args.coverage)
         except (subprocess.CalledProcessError, FileNotFoundError) as exc:
             print(f"error: --coverage: git diff failed: {getattr(exc, 'stderr', '') or exc}", file=sys.stderr)
             return 2
+        added, removed = changed_ranges(files)
         tip = args.coverage.partition("..")[2] or args.ref
+        base = args.coverage.partition("..")[0]
+        if is_qmd:
+            tab_notes = mark_notes(repo, files, base, tip, blocks)
         for path in sorted(added):
             content = read_lines(repo, path, tip) or []
             # Blank lines never need showing: drop them from each changed range before looking for gaps.
@@ -376,11 +624,12 @@ def main():
         print(f"warning: {w}")
     for e in errors:
         print(f"ERROR: {e}")
-    for n in notes:
+    for n in notes + tab_notes:
         print(f"note: {n}")
     print(f"checked {refs} reference(s) and {checked_blocks} verbatim snippet(s): "
           f"{len(errors)} error(s), {len(warnings)} warning(s)"
-          + (f", {len(notes)} changed range(s) not shown" if args.coverage else ""))
+          + (f", {len(notes)} changed range(s) not shown" if args.coverage else "")
+          + (f", {len(tab_notes)} Before/After note(s)" if tab_notes else ""))
     return 1 if errors else 0
 
 

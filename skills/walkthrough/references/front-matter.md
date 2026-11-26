@@ -27,6 +27,33 @@ format:
         body.quarto-dark { --mermaid-label-fg-color: #fff; --mermaid-edge-color: #adb5bd; }
         body.quarto-dark :is(.edgeLabel, .edgeLabel p, .labelBkg) { background-color: var(--mermaid-label-bg-color) !important; }
         </style>
+        <style>
+        div.sourceCode code > span:is(.kompreni-added, .kompreni-removed, .kompreni-changed) { display: inline-block; min-width: 100%; }
+        div.sourceCode code > span.kompreni-added { background: rgba(46,160,67,.18); }
+        div.sourceCode code > span.kompreni-removed { background: rgba(248,81,73,.18); }
+        div.sourceCode code > span.kompreni-changed { background: rgba(214,162,28,.24); }
+        div.sourceCode code > span:is(.kompreni-added, .kompreni-removed, .kompreni-changed)::after { position: absolute; left: 3em; top: 0; width: 1em; text-align: center; font-weight: bold; }
+        div.sourceCode code > span.kompreni-added::after { content: "+"; color: #2ea043; }
+        div.sourceCode code > span.kompreni-removed::after { content: "−"; color: #e5534b; }
+        div.sourceCode code > span.kompreni-changed::after { content: "~"; color: #c69026; }
+        </style>
+        <script>
+        document.addEventListener("DOMContentLoaded", () => {
+          for (const div of document.querySelectorAll("div.sourceCode:is([data-added], [data-removed], [data-changed])")) {
+            const kinds = {};
+            for (const kind of ["added", "removed", "changed"]) {
+              for (const part of (div.dataset[kind] || "").split(",").filter(p => p.trim())) {
+                const [a, b] = part.split("-").map(Number);
+                for (let n = a; n <= (b || a); n++) kinds[n] = kind;
+              }
+            }
+            for (const span of div.querySelectorAll("code > span[id]")) {
+              const kind = kinds[Number(span.id.split("-").pop())];
+              if (kind) span.classList.add("kompreni-" + kind);
+            }
+          }
+        });
+        </script>
 kompreni:
   schema: 1
   kind: walkthrough
@@ -57,7 +84,7 @@ The same, without the `format:` key.
 |---|---|---|
 | `title` | yes | Names the purpose, not the files. Double-quoted; escape `"` inside as `\"` |
 | `date` | yes | Today, `YYYY-MM-DD` |
-| `format` | `qmd` only | Exactly as above. `embed-resources` makes the HTML one self-contained file. `grid` gives the body the room Quarto keeps on the left for a sidebar, which a standalone page never has, so code and diagrams get wider; the TOC on the right is unchanged. `theme` with `light` and `dark` adds Quarto's light/dark toggle (top right), and `respect-user-color-scheme` starts in the reader's system setting until they use the toggle. The `<style>` fixes mermaid colours that Quarto gets wrong: in dark mode, labels in the theme's dark blue and near-invisible arrows; in both modes, near-black subgraph boxes. Copy it unchanged. **Inside an existing Quarto project** (see `formats.md`), leave out `grid`, `theme`, `respect-user-color-scheme` and `include-in-header`, so the site's own layout and theme apply |
+| `format` | `qmd` only | Exactly as above. `embed-resources` makes the HTML one self-contained file. `grid` gives the body the room Quarto keeps on the left for a sidebar, which a standalone page never has, so code and diagrams get wider; the TOC on the right is unchanged. `theme` with `light` and `dark` adds Quarto's light/dark toggle (top right), and `respect-user-color-scheme` starts in the reader's system setting until they use the toggle. The first `<style>` fixes mermaid colours that Quarto gets wrong: in dark mode, labels in the theme's dark blue and near-invisible arrows; in both modes, near-black subgraph boxes. The second `<style>` and the `<script>` tint the lines listed in a code block's `changed=`, `added=` and `removed=` (yellow, green and red, with a `~`, `+` or `−` beside the line number; see `formats.md`, "Before and after"): the script reads the real line number from each line's id, which `.numberLines startFrom` sets, and the translucent tints read in both light and dark mode. Copy all of it unchanged. **Inside an existing Quarto project** (see `formats.md`), leave out `grid`, `theme`, `respect-user-color-scheme` and the mermaid `<style>`, so the site's own layout and theme apply; keep `include-in-header` with only the line-mark `<style>` and `<script>` |
 | `kompreni.schema` | yes | `1` |
 | `kompreni.kind` | yes | `walkthrough` |
 | `kompreni.summary` | yes | One sentence: what changed and why, in behaviour terms. Written for someone scanning a list of walkthroughs |

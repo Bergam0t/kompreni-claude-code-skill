@@ -263,5 +263,132 @@ class CheckRefsTest(unittest.TestCase):
         self.assertIn("checked 0 reference", out)
 
 
+M_BASE = "def load(path):\n    data = read(path)\n    return data\n\n\ndef save(data):\n    write(data)\n"
+M_TIP = ("def load(path):\n    data = read(path)\n    data = clean(data)\n    return data\n\n\n"
+         "def save(data):\n    write(data, safe=True)\n")
+SAVE_TABS = ('::: {.panel-tabset}\n#### Before\n'
+             '```{.python .numberLines startFrom="6" changed="7" filename="src/m.py:6-7@base"}\n'
+             'def save(data):\n    write(data)\n```\n\n#### After\n'
+             '```{.python .numberLines startFrom="7" changed="8" filename="src/m.py:7-8"}\n'
+             'def save(data):\n    write(data, safe=True)\n```\n:::\n')
+
+
+class BeforeAfterTest(unittest.TestCase):
+    """Before/After tabsets, changed= marks and dotfiles, on a repo with tags base and tip."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.repo = Path(tempfile.mkdtemp())
+        git(cls.repo, "init", "-q", "-b", "main")
+        git(cls.repo, "config", "user.email", "t@example.com")
+        git(cls.repo, "config", "user.name", "t")
+        git(cls.repo, "config", "core.autocrlf", "false")
+        (cls.repo / "src").mkdir()
+        (cls.repo / "src" / "m.py").write_text(M_BASE, newline="\n")
+        (cls.repo / ".editorconfig").write_text("root = true\n[*]\n", newline="\n")
+        git(cls.repo, "add", ".")
+        git(cls.repo, "commit", "-qm", "base")
+        git(cls.repo, "tag", "base")
+        (cls.repo / "src" / "m.py").write_text(M_TIP, newline="\n")
+        (cls.repo / "src" / "new.py").write_text("def helper():\n    pass\n", newline="\n")
+        (cls.repo / ".editorconfig").write_text("root = true\n[*]\nindent = 4\n", newline="\n")
+        git(cls.repo, "add", ".")
+        git(cls.repo, "commit", "-qm", "tip")
+        git(cls.repo, "tag", "tip")
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.repo, ignore_errors=True)
+
+    def run_qmd(self, draft, *extra):
+        doc = self.repo / "walkthrough.qmd"
+        doc.write_text(draft, encoding="utf-8", newline="\n")
+        try:
+            p = subprocess.run([sys.executable, str(SCRIPT), "--repo", str(self.repo), "--file", str(doc),
+                                "--ref", "tip", *extra], capture_output=True, text=True)
+        finally:
+            doc.unlink()
+        return p.returncode, p.stdout
+
+    def test_valid_tabset_passes(self):
+        code, out = self.run_qmd(SAVE_TABS, "--coverage", "base..tip")
+        self.assertEqual(code, 0, out)
+        self.assertIn("0 warning(s)", out)
+        self.assertNotIn("Before/After note", out)
+
+    def test_pure_addition_tabset(self):
+        draft = ('::: {.panel-tabset}\n#### Before\n'
+                 '```{.python .numberLines startFrom="1" filename="src/m.py:1-3@base"}\n'
+                 'def load(path):\n    data = read(path)\n    return data\n```\n\n#### After\n'
+                 '```{.python .numberLines startFrom="1" added="3" filename="src/m.py:1-4"}\n'
+                 'def load(path):\n    data = read(path)\n    data = clean(data)\n    return data\n```\n:::\n')
+        code, out = self.run_qmd(draft, "--coverage", "base..tip")
+        self.assertEqual(code, 0, out)
+        self.assertNotIn("Before/After note", out)
+
+    def test_group_warns(self):
+        code, out = self.run_qmd(SAVE_TABS.replace("{.panel-tabset}", '{.panel-tabset group="before-after"}'))
+        self.assertEqual(code, 0, out)
+        self.assertIn("page jumps", out)
+
+    def test_tab_names_and_refs(self):
+        code, out = self.run_qmd(SAVE_TABS.replace("#### Before", "#### Old"))
+        self.assertEqual(code, 1)
+        self.assertIn("use exactly `Before` then `After`", out)
+        code, out = self.run_qmd(SAVE_TABS.replace("src/m.py:6-7@base", "src/m.py:7-8")
+                                 .replace("    write(data)\n", "    write(data, safe=True)\n", 1)
+                                 .replace('startFrom="6" changed="7"', 'startFrom="7" changed="8"'))
+        self.assertEqual(code, 1)
+        self.assertIn("Before tab shows old code", out)
+        code, out = self.run_qmd(SAVE_TABS.replace("src/m.py:7-8\"", "src/m.py:6-7@base\"")
+                                 .replace("    write(data, safe=True)\n", "    write(data)\n")
+                                 .replace('startFrom="7" changed="8"', 'startFrom="6" changed="7"'))
+        self.assertEqual(code, 1)
+        self.assertIn("After tab shows the code at the tip", out)
+
+    def test_marks_must_be_well_formed_numbered_and_in_range(self):
+        code, out = self.run_qmd(SAVE_TABS.replace('changed="8"', 'changed="eight"'))
+        self.assertIn("should be line numbers", out)
+        code, out = self.run_qmd(SAVE_TABS.replace('changed="8"', 'changed="9"'))
+        self.assertIn("outside src/m.py:7-8", out)
+        code, out = self.run_qmd(SAVE_TABS.replace('.numberLines startFrom="7" changed="8"', 'changed="8"'))
+        self.assertEqual(code, 1)
+        self.assertIn("changed= needs .numberLines", out)
+        code, out = self.run_qmd(SAVE_TABS.replace('changed="8"', 'removed="8"'))
+        self.assertIn("removed= in a block of current code", out)
+        code, out = self.run_qmd(SAVE_TABS.replace('changed="7"', 'added="7"'))
+        self.assertIn("added= in a block of old code", out)
+        code, out = self.run_qmd(SAVE_TABS.replace('changed="8"', 'changed="8" added="8"'))
+        self.assertIn("overlaps another mark", out)
+
+    def test_marks_checked_against_the_diff(self):
+        code, out = self.run_qmd(SAVE_TABS.replace('changed="8"', 'changed="7-8"'), "--coverage", "base..tip")
+        self.assertEqual(code, 0, out)
+        self.assertIn('the diff gives changed="8" (the block has changed="7-8")', out)
+        code, out = self.run_qmd(SAVE_TABS.replace('changed="8"', 'added="8"'), "--coverage", "base..tip")
+        self.assertIn('the diff gives changed="8" (the block has added="8")', out)
+        code, out = self.run_qmd(SAVE_TABS.replace(' changed="7"', ""), "--coverage", "base..tip")
+        self.assertIn('the diff gives changed="7" (the block has none)', out)
+
+    def test_untabbed_block_of_modified_file_noted(self):
+        save = '```{.python .numberLines startFrom="7" filename="src/m.py:7-8"}\ndef save(data):\n    write(data, safe=True)\n```\n'
+        code, out = self.run_qmd(save, "--coverage", "base..tip")
+        self.assertIn("belongs in a Before/After tabset", out)
+        code, out = self.run_qmd('::: {.callout-note collapse="true" title="Tests"}\n' + save + ':::\n',
+                                 "--coverage", "base..tip")
+        self.assertNotIn("Before/After", out)
+        new = '```{.python filename="src/new.py:1-2"}\ndef helper():\n    pass\n```\n'
+        code, out = self.run_qmd(new, "--coverage", "base..tip")
+        self.assertNotIn("Before/After", out)
+
+    def test_dotfiles(self):
+        block = '```{.ini filename="./.editorconfig:1-3"}\nroot = true\n[*]\nindent = 4\n```\n'
+        code, out = self.run_qmd(block + "\nSee `.editorconfig:3`, not `.editorconfig:9`.\n", "--coverage", "base..tip")
+        self.assertEqual(code, 1)
+        self.assertIn(".editorconfig:9-9 at tip is outside the file", out)
+        self.assertNotIn("not shown: .editorconfig", out)
+        self.assertIn("checked 2 reference(s) and 1 verbatim snippet(s)", out)
+
+
 if __name__ == "__main__":
     unittest.main()
