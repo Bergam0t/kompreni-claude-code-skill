@@ -19,6 +19,8 @@ format:
         body { --mermaid-fg-color--lightest: rgba(128,128,128,.08); --mermaid-fg-color--lighter: #adb5bd; }
         body.quarto-dark { --mermaid-label-fg-color: #fff; --mermaid-edge-color: #adb5bd; }
         body.quarto-dark :is(.edgeLabel, .edgeLabel p, .labelBkg) { background-color: var(--mermaid-label-bg-color) !important; }
+        .code-annotation-container-grid dd code:not(.sourceCode) { background-color: rgba(236,240,241,.65); }
+        body.quarto-dark .code-annotation-container-grid dd code:not(.sourceCode) { background-color: rgba(67,67,67,.65); }
         </style>
         <style>
         div.sourceCode code > span:is(.kompreni-added, .kompreni-removed, .kompreni-changed) { display: inline-block; min-width: 100%; }

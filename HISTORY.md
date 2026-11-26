@@ -79,3 +79,5 @@
     - A Compare page shows one real change as an explanation, a walkthrough and a code tour, in tabs; `compare.html#explain`, `#walkthrough` and `#code-tour` link to a tab
     - Install, Usage (with all options), the kompreni-offer mod (with screenshots) and How it works pages
     - Built from `site/` by a GitHub Action on each push to main; the README now keeps the essentials and links to the site
+- Inline code in code-tour annotation notes is readable in dark mode
+    - Quarto styles inline code only in paragraphs, list items and table cells, so in an annotation note it was white on near-white; the theme-fix `<style>` in the walkthrough front matter now gives it the list-item background of each theme
