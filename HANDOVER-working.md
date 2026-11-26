@@ -49,6 +49,9 @@ Tracks [HANDOVER-original.md](HANDOVER-original.md): what has and hasn't been ac
         - the `<style>` fixes all of these through Quarto's runtime `--mermaid-*` CSS variables, so they switch with the toggle;
         - the self-contained HTML grows by about 2 MB, because both theme bundles are embedded.
     - Not tried by a reader in a real browser, only through headless screenshots. The toggle click itself was not exercised
+- [x] Wider standalone walkthroughs (`references/front-matter.md`, `code-tour.md`): `grid: {sidebar-width: 0px, body-width: 1050px}` gives the body the empty left-sidebar slot; the TOC margin is unchanged. Left out inside an existing Quarto project. Scenarios 23 and 27 updated; both dogfood walkthroughs re-rendered
+    - Checked by headless Edge screenshots at 1920, 1366 and 900px: the body starts at the left edge at 1366, is centred with the TOC at 1920, and collapses as before at 900. Code lines up to about 110 characters no longer clip (snapshot.py:34-42 did at 800px)
+    - Trade-off: prose lines run to about 140 characters at full width, longer than the usual readable maximum. If that turns out to grate, the alternative is keeping prose at ~800px and letting code and diagrams extend left (Quarto's `column-page-left`)
 - [ ] Scenarios 22-31 not yet run, in particular by a fresh agent (`claude --plugin-dir .`) with no prior context
 - [ ] Code tours of large changes (the 600-line rule) not yet tried
 - [ ] A code tour's teaching value not yet judged by anyone but its author

@@ -5,6 +5,9 @@ format:
   html:
     embed-resources: true
     toc: true
+    grid:
+      sidebar-width: 0px
+      body-width: 1050px
     code-annotations: hover
     theme:
       light: flatly

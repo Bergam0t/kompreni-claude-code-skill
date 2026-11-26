@@ -59,6 +59,9 @@
     - Uses Quarto's `flatly`/`darkly` theme pair with `respect-user-color-scheme`; the toggle sits in the top right and remembers the reader's choice
     - Fixes mermaid diagram colours that Quarto's defaults get wrong: dark blue labels and faint arrows in dark mode, near-black subgraph boxes in both modes
     - Inside an existing Quarto project the walkthrough leaves these settings out, so the site's own theme applies
+- Rendered standalone Quarto walkthroughs and code tours are wider
+    - The body takes the space Quarto keeps on the left for a sidebar, which a standalone page never has, so long code lines and diagrams fit; the table of contents stays on the right
+    - Inside an existing Quarto project the walkthrough leaves this out, so the site's own layout applies
 - The `kompreni-offer` mod gains **Walkthrough** and **Code tour** buttons (mod version 0.1.3)
     - They fill in `/kompreni:walkthrough` (with `code=all` for Code tour), with the chosen level, and the depth only if it's `standard` or `deep`; never a scope
     - Shown only when the walkthrough skill is installed, on both the full and the one-line row; never overwrite a draft
