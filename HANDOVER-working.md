@@ -74,6 +74,8 @@ Tracks [HANDOVER-original.md](HANDOVER-original.md): what has and hasn't been ac
 
 - [x] `examples/` (explain, walkthrough, code tour of one real change) is linked from the README via GitHub Pages URLs. Pages enabled from main, root (2026-11-26); the github.io links redirect to sammirosser.com
 - [x] Docs site in `site/` (Quarto website), deployed by `.github/workflows/site.yml` (Pages build type: GitHub Actions). README trimmed to essentials plus links. **Keep `_quarto.yml` out of the repo root**: the walkthrough skill treats a `_quarto.yml` in any parent folder as "inside a Quarto project", which would change how `kompreni/walkthroughs/` render. Build locally with `cd site && python _prepare.py && quarto render`; `_prepare.py` can't be a Quarto `pre-render` because `{{< include >}}` is resolved before pre-render runs
+- [x] README demo GIF (`examples/demo.gif`), made by `site/_make_demo_gif.py` from the built site: headless Edge/Chrome driven over the DevTools protocol (needs Pillow and websocket-client). Re-run it when the examples or the site's look change
+- [x] Fixed: inline code in code-annotation notes was white on near-white in dark mode (theme-fix `<style>` in `front-matter.md`); examples re-rendered, this repo's own walkthroughs updated
 - [ ] The examples' source commits (`4188308..8a5fc92`) aren't yet pushed to ReModel-Club/MOOOD-study `add-codebase-tutorial`
 
 - [ ] §9 Phase 1: "Test this on several different types of changes": the 8 scenarios in `evals/scenarios/` are written but **not yet run**

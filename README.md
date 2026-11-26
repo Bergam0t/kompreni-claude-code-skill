@@ -6,6 +6,8 @@ Agent completion summaries tell you what was done. Kompreni helps you build a me
 
 **Documentation: [bergam0t.github.io/kompreni-claude-code-skill](https://bergam0t.github.io/kompreni-claude-code-skill/)**, including [the three outputs side by side](https://bergam0t.github.io/kompreni-claude-code-skill/compare.html) on one real change.
 
+[![A tour of the three outputs for one real change: an explanation in the chat with evidence labels, a walkthrough document, its Before/After tabs with changed lines marked, and a code tour annotating every changed line](examples/demo.gif)](https://bergam0t.github.io/kompreni-claude-code-skill/compare.html)
+
 ## Requirements
 
 - Claude Code.

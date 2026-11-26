@@ -2,6 +2,8 @@
 title: "Compare the three outputs"
 subtitle: "One real change, explained three ways."
 toc: false
+page-layout: full
+body-classes: kompreni-wide
 include-after-body:
   text: <script src="compare.js"></script>
 ---
